@@ -25,21 +25,21 @@ const (
 
 // CallRecordDataModel represents a call record in the database.
 type CallRecordDataModel struct {
-	ID              string      `json:"id" bson:"id,omitempty"`
-	TemplateID      string      `json:"template_id" bson:"template_id,omitempty"`
-	PhoneNumber     string      `json:"phone_number" bson:"phone_number,omitempty"`
-	AppointmentDate string      `json:"appointment_date" bson:"appointment_date,omitempty"`
-	AppointmentTime string      `json:"appointment_time" bson:"appointment_time,omitempty"`
-	Status          CallStatus  `json:"status" bson:"status,omitempty"`
-	BotnoiCallID    string      `json:"botnoi_call_id" bson:"botnoi_call_id,omitempty"`
-	ResultData      interface{} `json:"result_data" bson:"result_data,omitempty"`
-	DueDate         time.Time   `json:"due_date" bson:"due_date,omitempty"`
-	Amount          float64     `json:"amount" bson:"amount,omitempty"`
-	UserID          string      `json:"user_id" bson:"user_id,omitempty"`
-	WorkspaceID     string      `json:"workspace_id" bson:"workspace_id,omitempty"`
-	CallDuration    int         `json:"call_duration" bson:"call_duration,omitempty"`
-	CreatedAt       time.Time   `json:"created_at" bson:"created_at,omitempty"`
-	UpdatedAt       time.Time   `json:"updated_at" bson:"updated_at,omitempty"`
+	ID              string        `json:"id" bson:"id,omitempty"`
+	TemplateID      *string       `json:"template_id" bson:"template_id,omitempty"`
+	PhoneNumber     string        `json:"phone_number" bson:"phone_number,omitempty"`
+	AppointmentDate string        `json:"appointment_date" bson:"appointment_date,omitempty"`
+	AppointmentTime string        `json:"appointment_time" bson:"appointment_time,omitempty"`
+	Status          CallStatus    `json:"status" bson:"status,omitempty"`
+	BotnoiCallID    string        `json:"botnoi_call_id" bson:"botnoi_call_id,omitempty"`
+	ResultData      *interface{}  `json:"result_data" bson:"result_data,omitempty"`
+	DueDate         time.Time     `json:"due_date" bson:"due_date,omitempty"`
+	Amount          float64       `json:"amount" bson:"amount,omitempty"`
+	UserID          string        `json:"user_id" bson:"user_id,omitempty"`
+	WorkspaceID     string        `json:"workspace_id" bson:"workspace_id,omitempty"`
+	CallDuration    int           `json:"call_duration" bson:"call_duration,omitempty"`
+	CreatedAt       time.Time     `json:"created_at" bson:"created_at,omitempty"`
+	UpdatedAt       time.Time     `json:"updated_at" bson:"updated_at,omitempty"`
 }
 
 // NewCallRecord initializes a new CallRecordDataModel with a UUIDv4 ID and current timestamps.
