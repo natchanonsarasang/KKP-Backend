@@ -113,6 +113,25 @@ func TestCallSessionsRepositoryCRUD(t *testing.T) {
 	}
 	assert.True(t, foundInUserList)
 
+	// 6.5. FindByFilter
+	filterObj := entities.CallSessionFilter{
+		ID:          testID,
+		Status:      "test-status-pending",
+		WorkspaceID: "test-session-workspace",
+		UserID:      "test-session-user",
+	}
+	allByFilter, err := repo.FindByFilter(filterObj)
+	assert.NoError(t, err)
+	assert.NotNil(t, allByFilter)
+	foundInFilterList := false
+	for _, s := range *allByFilter {
+		if s.ID == testID {
+			foundInFilterList = true
+			break
+		}
+	}
+	assert.True(t, foundInFilterList)
+
 	// 7. Update
 	found.Status = "test-status-running"
 	found.CompletedCalls = 8

@@ -24,6 +24,7 @@ type ICallSessionsRepository interface {
 	FindByStatus(status string) (*[]entities.CallSessionDataModel, error)
 	FindByWorkspaceID(workspaceID string) (*[]entities.CallSessionDataModel, error)
 	FindByUserID(userID string) (*[]entities.CallSessionDataModel, error)
+	FindByFilter(filter entities.CallSessionFilter) (*[]entities.CallSessionDataModel, error)
 	UpdateCallSession(id string, data entities.CallSessionDataModel) error
 	DeleteCallSession(id string) error
 }
@@ -153,4 +154,36 @@ func (repo *callSessionsRepository) DeleteCallSession(id string) error {
 		return err
 	}
 	return nil
+}
+
+func (repo *callSessionsRepository) FindByFilter(filter entities.CallSessionFilter) (*[]entities.CallSessionDataModel, error) {
+	query := bson.M{}
+	if filter.ID != "" {
+		query["id"] = filter.ID
+	}
+	if filter.Status != "" {
+		query["status"] = filter.Status
+	}
+	if filter.WorkspaceID != "" {
+		query["workspace_id"] = filter.WorkspaceID
+	}
+	if filter.UserID != "" {
+		query["user_id"] = filter.UserID
+	}
+
+	var sessions []entities.CallSessionDataModel
+	cursor, err := repo.Collection.Find(repo.Context, query)
+	if err != nil {
+		fiberlog.Errorf("CallSessions -> FindByFilter: %s \n", err)
+		return nil, err
+	}
+	defer cursor.Close(repo.Context)
+
+	err = cursor.All(repo.Context, &sessions)
+	if err != nil {
+		fiberlog.Errorf("CallSessions -> FindByFilter decoding: %s \n", err)
+		return nil, err
+	}
+
+	return &sessions, nil
 }
