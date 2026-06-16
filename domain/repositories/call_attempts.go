@@ -21,8 +21,13 @@ type ICallAttemptsRepository interface {
 	Insert(data entities.CallAttemptModel) error
 	FindAllByWorkspace(workspaceID primitive.ObjectID) (*[]entities.CallAttemptModel, error)
 	FindByID(id primitive.ObjectID) (*entities.CallAttemptModel, error)
+	FindByIDByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) (*entities.CallAttemptModel, error)
+	// System Methods
 	Update(id primitive.ObjectID, data entities.CallAttemptModel) error
 	Delete(id primitive.ObjectID) error
+	// ByUser Methods
+	UpdateByUser(id primitive.ObjectID, workspaceID primitive.ObjectID, data entities.CallAttemptModel) error
+	DeleteByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) error
 }
 
 func NewCallAttemptsRepository(db *MongoDB) ICallAttemptsRepository {
@@ -66,21 +71,66 @@ func (repo *callAttemptsRepository) FindByID(id primitive.ObjectID) (*entities.C
 	return &attempt, nil
 }
 
+func (repo *callAttemptsRepository) FindByIDByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) (*entities.CallAttemptModel, error) {
+	filter := bson.M{"_id": id, "workspace_id": workspaceID}
+	var attempt entities.CallAttemptModel
+	if err := repo.Collection.FindOne(repo.Context, filter).Decode(&attempt); err != nil {
+		fiberlog.Errorf("CallAttempts -> FindByIDByUser: %s \n", err)
+		return nil, err
+	}
+	return &attempt, nil
+}
+
 func (repo *callAttemptsRepository) Update(id primitive.ObjectID, data entities.CallAttemptModel) error {
 	filter := bson.M{"_id": id}
 	update := bson.M{"$set": data}
-	if _, err := repo.Collection.UpdateOne(repo.Context, filter, update); err != nil {
+	result, err := repo.Collection.UpdateOne(repo.Context, filter, update)
+	if err != nil {
 		fiberlog.Errorf("CallAttempts -> Update: %s \n", err)
 		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
 	}
 	return nil
 }
 
 func (repo *callAttemptsRepository) Delete(id primitive.ObjectID) error {
 	filter := bson.M{"_id": id}
-	if _, err := repo.Collection.DeleteOne(repo.Context, filter); err != nil {
+	result, err := repo.Collection.DeleteOne(repo.Context, filter)
+	if err != nil {
 		fiberlog.Errorf("CallAttempts -> Delete: %s \n", err)
 		return err
+	}
+	if result.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+func (repo *callAttemptsRepository) UpdateByUser(id primitive.ObjectID, workspaceID primitive.ObjectID, data entities.CallAttemptModel) error {
+	filter := bson.M{"_id": id, "workspace_id": workspaceID}
+	update := bson.M{"$set": data}
+	result, err := repo.Collection.UpdateOne(repo.Context, filter, update)
+	if err != nil {
+		fiberlog.Errorf("CallAttempts -> UpdateByUser: %s \n", err)
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+func (repo *callAttemptsRepository) DeleteByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) error {
+	filter := bson.M{"_id": id, "workspace_id": workspaceID}
+	result, err := repo.Collection.DeleteOne(repo.Context, filter)
+	if err != nil {
+		fiberlog.Errorf("CallAttempts -> DeleteByUser: %s \n", err)
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
 	}
 	return nil
 }

@@ -5,6 +5,8 @@ import (
 	"go-fiber-template/domain/repositories"
 	"go-fiber-template/httpclient"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type usersService struct {
@@ -14,6 +16,7 @@ type usersService struct {
 type IUsersService interface {
 	GetAllUsers() (*[]entities.UserDataModel, error)
 	InsertNewUser(data entities.UserDataModel) error
+	VerifyUserInWorkspace(userID string, workspaceID primitive.ObjectID) (bool, error)
 }
 
 func NewUsersService(repo0 repositories.IUsersRepository) IUsersService {
@@ -41,4 +44,8 @@ func (sv *usersService) InsertNewUser(data entities.UserDataModel) error {
 	data.Ip = dataIp
 
 	return sv.UsersRepository.InsertUser(data)
+}
+
+func (sv *usersService) VerifyUserInWorkspace(userID string, workspaceID primitive.ObjectID) (bool, error) {
+	return sv.UsersRepository.VerifyUserInWorkspace(userID, workspaceID)
 }
