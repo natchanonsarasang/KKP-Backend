@@ -58,7 +58,7 @@ func (repo *callRecordsRepository) FindByID(id string) (*entities.CallRecordData
 
 func (repo *callRecordsRepository) FindAll() (*[]entities.CallRecordDataModel, error) {
 	filter := bson.M{}
-	var records []entities.CallRecordDataModel
+	records := []entities.CallRecordDataModel{}
 
 	cursor, err := repo.Collection.Find(repo.Context, filter)
 	if err != nil {
@@ -102,7 +102,7 @@ func (repo *callRecordsRepository) DeleteCallRecord(id string) error {
 
 func (repo *callRecordsRepository) FindByUserID(userID string) (*[]entities.CallRecordDataModel, error) {
 	filter := bson.M{"user_id": userID}
-	var records []entities.CallRecordDataModel
+	records := []entities.CallRecordDataModel{}
 
 	cursor, err := repo.Collection.Find(repo.Context, filter)
 	if err != nil {
@@ -135,7 +135,7 @@ func (repo *callRecordsRepository) FindByFilter(filter entities.CallRecordFilter
 		query["botnoi_call_id"] = filter.BotnoiCallID
 	}
 
-	var records []entities.CallRecordDataModel
+	records := []entities.CallRecordDataModel{}
 	cursor, err := repo.Collection.Find(repo.Context, query)
 	if err != nil {
 		fiberlog.Errorf("CallRecords -> FindByFilter: %s \n", err)

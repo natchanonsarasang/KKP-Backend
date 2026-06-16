@@ -7,17 +7,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// GatewayCallRecords registers the HTTP routes for Call Records and applies the JWT auth middleware to protect them.
-func GatewayCallRecords(gateway HTTPGateway, app *fiber.App) {
-	api := app.Group("/api/v1/call-records", middlewares.SetJWtHeaderHandler())
-
-	api.Post("/", gateway.CreateCallRecord)
-	api.Get("/:id", gateway.GetCallRecordByID)
-	api.Get("/", gateway.GetAllCallRecords)
-	api.Put("/:id", gateway.UpdateCallRecord)
-	api.Delete("/:id", gateway.DeleteCallRecord)
-}
-
 func (h *HTTPGateway) CreateCallRecord(ctx *fiber.Ctx) error {
 	tokenDetails, err := middlewares.DecodeJWTToken(ctx)
 	if err != nil {

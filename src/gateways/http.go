@@ -13,7 +13,6 @@ type HTTPGateway struct {
 	CallListItemService service.ICallListItemsService
 	CallAttemptService  service.ICallAttemptsService
 	CallSessionService  service.ICallSessionsService
-	CallRecordsService  service.ICallRecordsService
 }
 
 func NewHTTPGateway(

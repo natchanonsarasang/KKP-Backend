@@ -53,7 +53,6 @@ func GatewayCallSessions(gateway HTTPGateway, app *fiber.App) {
 	api.Delete("/:id", gateway.DeleteCallSession)
 }
 
-// GatewayCallRecords registers the HTTP routes for Call Records and applies the JWT auth middleware to protect them.
 func GatewayCallRecords(gateway HTTPGateway, app *fiber.App) {
 	api := app.Group("/api/v1/call-records", middlewares.SetJWtHeaderHandler())
 
@@ -63,3 +62,4 @@ func GatewayCallRecords(gateway HTTPGateway, app *fiber.App) {
 	api.Put("/:id", gateway.UpdateCallRecord)
 	api.Delete("/:id", gateway.DeleteCallRecord)
 }
+
