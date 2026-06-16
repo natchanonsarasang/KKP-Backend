@@ -88,7 +88,14 @@ func (h *HTTPGateway) GetAllCallRecords(ctx *fiber.Ctx) error {
 		})
 	}
 
-	data, err := h.CallRecordsService.GetAllCallRecordsByUser(tokenDetails.UserID)
+	filter := entities.CallRecordFilter{
+		Status:       ctx.Query("status"),
+		WorkspaceID:  ctx.Query("workspace_id"),
+		UserID:       ctx.Query("user_id"),
+		BotnoiCallID: ctx.Query("botnoi_call_id"),
+	}
+
+	data, err := h.CallRecordsService.GetAllCallRecordsByUser(tokenDetails.UserID, filter)
 	if err != nil {
 		return ctx.Status(fiber.StatusInternalServerError).JSON(entities.ResponseModel{
 			Message: "cannot retrieve call records: " + err.Error(),

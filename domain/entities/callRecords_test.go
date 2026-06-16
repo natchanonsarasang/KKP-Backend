@@ -80,4 +80,5 @@ func TestCallStatusEnum(t *testing.T) {
 	assert.Equal(t, CallStatus("failed"), StatusFailed)
 	assert.Equal(t, CallStatus("rejected"), StatusRejected)
 	assert.Equal(t, CallStatus("voicemail"), StatusVoicemail)
+	assert.Equal(t, CallStatus("calling"), StatusCalling)
 }

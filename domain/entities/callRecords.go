@@ -21,6 +21,7 @@ const (
 	StatusFailed     CallStatus = "failed"
 	StatusRejected   CallStatus = "rejected"
 	StatusVoicemail  CallStatus = "voicemail"
+	StatusCalling    CallStatus = "calling"
 )
 
 // CallRecordDataModel represents a call record in the database.
@@ -51,4 +52,11 @@ func NewCallRecord() CallRecordDataModel {
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
+}
+
+type CallRecordFilter struct {
+	UserID       string `json:"user_id"`
+	WorkspaceID  string `json:"workspace_id"`
+	Status       string `json:"status"`
+	BotnoiCallID string `json:"botnoi_call_id"`
 }

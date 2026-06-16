@@ -21,6 +21,7 @@ type ICallRecordsRepository interface {
 	InsertCallRecord(data entities.CallRecordDataModel) error
 	FindByID(id string) (*entities.CallRecordDataModel, error)
 	FindByUserID(userID string) (*[]entities.CallRecordDataModel, error)
+	FindByFilter(filter entities.CallRecordFilter) (*[]entities.CallRecordDataModel, error)
 	FindAll() (*[]entities.CallRecordDataModel, error)
 	UpdateCallRecord(id string, data entities.CallRecordDataModel) error
 	DeleteCallRecord(id string) error
@@ -113,6 +114,38 @@ func (repo *callRecordsRepository) FindByUserID(userID string) (*[]entities.Call
 	err = cursor.All(repo.Context, &records)
 	if err != nil {
 		fiberlog.Errorf("CallRecords -> FindByUserID decoding: %s \n", err)
+		return nil, err
+	}
+
+	return &records, nil
+}
+
+func (repo *callRecordsRepository) FindByFilter(filter entities.CallRecordFilter) (*[]entities.CallRecordDataModel, error) {
+	query := bson.M{}
+	if filter.UserID != "" {
+		query["user_id"] = filter.UserID
+	}
+	if filter.WorkspaceID != "" {
+		query["workspace_id"] = filter.WorkspaceID
+	}
+	if filter.Status != "" {
+		query["status"] = filter.Status
+	}
+	if filter.BotnoiCallID != "" {
+		query["botnoi_call_id"] = filter.BotnoiCallID
+	}
+
+	var records []entities.CallRecordDataModel
+	cursor, err := repo.Collection.Find(repo.Context, query)
+	if err != nil {
+		fiberlog.Errorf("CallRecords -> FindByFilter: %s \n", err)
+		return nil, err
+	}
+	defer cursor.Close(repo.Context)
+
+	err = cursor.All(repo.Context, &records)
+	if err != nil {
+		fiberlog.Errorf("CallRecords -> FindByFilter decoding: %s \n", err)
 		return nil, err
 	}
 
