@@ -11,6 +11,7 @@ type HTTPGateway struct {
 	DebtorService       service.IDebtorsService
 	CallListItemService service.ICallListItemsService
 	CallAttemptService  service.ICallAttemptsService
+	CallSessionService  service.ICallSessionsService
 }
 
 func NewHTTPGateway(
@@ -19,16 +20,19 @@ func NewHTTPGateway(
 	debtors service.IDebtorsService,
 	items service.ICallListItemsService,
 	attempts service.ICallAttemptsService,
+	sessions service.ICallSessionsService,
 ) {
 	gateway := &HTTPGateway{
 		UserService:         users,
 		DebtorService:       debtors,
 		CallListItemService: items,
 		CallAttemptService:  attempts,
+		CallSessionService:  sessions,
 	}
 
 	GatewayUsers(*gateway, app)
 	GatewayDebtors(*gateway, app)
 	GatewayCallListItems(*gateway, app)
 	GatewayCallAttempts(*gateway, app)
+	GatewayCallSessions(*gateway, app)
 }
