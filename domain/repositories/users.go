@@ -9,6 +9,7 @@ import (
 	fiberlog "github.com/gofiber/fiber/v2/log"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -21,12 +22,13 @@ type usersRepository struct {
 type IUsersRepository interface {
 	InsertUser(data entities.UserDataModel) error
 	FindAll() (*[]entities.UserDataModel, error)
+	VerifyUserInWorkspace(userID string, workspaceID primitive.ObjectID) (bool, error)
 }
 
 func NewUsersRepository(db *MongoDB) IUsersRepository {
 	return &usersRepository{
 		Context:    db.Context,
-		Collection: db.MongoDB.Database(os.Getenv("DATABASE_NAME")).Collection("users"),
+		Collection: db.MongoDB.Database(os.Getenv("DATABASE_NAME")).Collection("workspace_members"),
 	}
 }
 
@@ -57,4 +59,16 @@ func (repo *usersRepository) FindAll() (*[]entities.UserDataModel, error) {
 	}
 
 	return &users, nil
+}
+
+func (repo *usersRepository) VerifyUserInWorkspace(userID string, workspaceID primitive.ObjectID) (bool, error) {
+	// Assuming users have a workspace_id field or a many-to-many relationship
+	// For now, let's check if the user exists and has this workspace_id
+	filter := bson.M{"user_id": userID, "workspace_id": workspaceID}
+	count, err := repo.Collection.CountDocuments(repo.Context, filter)
+	if err != nil {
+		fiberlog.Errorf("Users -> VerifyUserInWorkspace: %s \n", err)
+		return false, err
+	}
+	return count > 0, nil
 }

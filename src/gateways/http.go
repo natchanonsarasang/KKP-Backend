@@ -7,6 +7,7 @@ import (
 )
 
 type HTTPGateway struct {
+<<<<<<< HEAD
 	UserService             service.IUsersService
 	WorkspaceMembersService service.IWorkspaceMembersService
 	WorkspacesService       service.IWorkspacesService
@@ -23,3 +24,37 @@ func NewHTTPGateway(app *fiber.App, users service.IUsersService, workspaceMember
 	GatewayWorkspaceMembers(*gateway, app)
 	GatewayWorkspaces(*gateway, app)
 }
+=======
+	UserService         service.IUsersService
+	CallRecordsService  service.ICallRecordsService
+	DebtorService       service.IDebtorsService
+	CallListItemService service.ICallListItemsService
+	CallAttemptService  service.ICallAttemptsService
+	CallSessionService  service.ICallSessionsService
+}
+
+func NewHTTPGateway(
+	app *fiber.App,
+	users service.IUsersService, callRecords service.ICallRecordsService,
+	debtors service.IDebtorsService,
+	items service.ICallListItemsService,
+	attempts service.ICallAttemptsService,
+	sessions service.ICallSessionsService,
+) {
+	gateway := &HTTPGateway{
+		UserService:         users,
+		DebtorService:       debtors,
+		CallListItemService: items,
+		CallAttemptService:  attempts,
+		CallSessionService:  sessions,
+		CallRecordsService:  callRecords,
+	}
+
+	GatewayUsers(*gateway, app)
+	GatewayDebtors(*gateway, app)
+	GatewayCallListItems(*gateway, app)
+	GatewayCallAttempts(*gateway, app)
+	GatewayCallSessions(*gateway, app)
+	GatewayCallRecords(*gateway, app)
+}
+>>>>>>> 33316c148a6e3a7efbb57d8fb58557c75307fb52
