@@ -74,7 +74,7 @@ func (repo *callSessionsRepository) FindOneByStatus(status string) (*entities.Ca
 
 func (repo *callSessionsRepository) FindByStatus(status string) (*[]entities.CallSessionDataModel, error) {
 	filter := bson.M{"status": status}
-	var sessions []entities.CallSessionDataModel
+	sessions := []entities.CallSessionDataModel{}
 
 	cursor, err := repo.Collection.Find(repo.Context, filter)
 	if err != nil {
@@ -94,7 +94,7 @@ func (repo *callSessionsRepository) FindByStatus(status string) (*[]entities.Cal
 
 func (repo *callSessionsRepository) FindByWorkspaceID(workspaceID string) (*[]entities.CallSessionDataModel, error) {
 	filter := bson.M{"workspace_id": workspaceID}
-	var sessions []entities.CallSessionDataModel
+	sessions := []entities.CallSessionDataModel{}
 
 	cursor, err := repo.Collection.Find(repo.Context, filter)
 	if err != nil {
@@ -114,7 +114,7 @@ func (repo *callSessionsRepository) FindByWorkspaceID(workspaceID string) (*[]en
 
 func (repo *callSessionsRepository) FindByUserID(userID string) (*[]entities.CallSessionDataModel, error) {
 	filter := bson.M{"user_id": userID}
-	var sessions []entities.CallSessionDataModel
+	sessions := []entities.CallSessionDataModel{}
 
 	cursor, err := repo.Collection.Find(repo.Context, filter)
 	if err != nil {
@@ -171,7 +171,7 @@ func (repo *callSessionsRepository) FindByFilter(filter entities.CallSessionFilt
 		query["user_id"] = filter.UserID
 	}
 
-	var sessions []entities.CallSessionDataModel
+	sessions := []entities.CallSessionDataModel{}
 	cursor, err := repo.Collection.Find(repo.Context, query)
 	if err != nil {
 		fiberlog.Errorf("CallSessions -> FindByFilter: %s \n", err)
