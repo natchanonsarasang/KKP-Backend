@@ -14,15 +14,36 @@ import (
 )
 
 func SetJWtHeaderHandler() fiber.Handler {
-	return jwtware.New(jwtware.Config{
-		SigningKey: jwtware.SigningKey{
-			Key:    []byte(os.Getenv("JWT_SECRET_KEY")),
-			JWTAlg: jwtware.HS256,
-		},
+	config := jwtware.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			return c.Status(fiber.StatusUnauthorized).JSON(entities.ResponseMessage{Message: "Unauthorization Token."})
 		},
-	})
+	}
+
+	jwkSetURL := os.Getenv("JWK_SET_URL")
+	supabaseURL := os.Getenv("SUPABASE_URL")
+	if supabaseURL == "" {
+		supabaseURL = os.Getenv("VITE_SUPABASE_URL")
+	}
+
+	if jwkSetURL != "" {
+		config.JWKSetURLs = []string{jwkSetURL}
+	} else if supabaseURL != "" {
+		// Clean supabase URL trailing slashes and build path
+		urlStr := supabaseURL
+		if len(urlStr) > 0 && urlStr[len(urlStr)-1] == '/' {
+			urlStr = urlStr[:len(urlStr)-1]
+		}
+		config.JWKSetURLs = []string{urlStr + "/auth/v1/.well-known/jwks.json"}
+	} else {
+		// Fallback to symmetric shared secret
+		config.SigningKey = jwtware.SigningKey{
+			Key:    []byte(os.Getenv("JWT_SECRET_KEY")),
+			JWTAlg: jwtware.HS256,
+		}
+	}
+
+	return jwtware.New(config)
 }
 
 type TokenDetails struct {
