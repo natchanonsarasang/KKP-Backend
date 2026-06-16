@@ -33,10 +33,14 @@ func main() {
 	mongodb := ds.NewMongoDB(10)
 
 	userRepo := repo.NewUsersRepository(mongodb)
+	workspaceMembersRepo := repo.NewWorkspaceMembersRepository(mongodb)
+	workspacesRepo := repo.NewWorkspacesRepository(mongodb)
 
 	sv0 := sv.NewUsersService(userRepo)
+	sv1 := sv.NewWorkspaceMembersService(workspaceMembersRepo)
+	sv2 := sv.NewWorkspacesService(workspacesRepo)
 
-	gw.NewHTTPGateway(app, sv0)
+	gw.NewHTTPGateway(app, sv0, sv1, sv2)
 
 	PORT := os.Getenv("PORT")
 
