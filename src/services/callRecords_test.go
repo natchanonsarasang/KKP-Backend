@@ -1,0 +1,234 @@
+package services
+
+import (
+	"testing"
+	"time"
+
+	"go-fiber-template/domain/entities"
+
+	"github.com/stretchr/testify/assert"
+)
+
+// mockCallRecordsRepository implements repositories.ICallRecordsRepository for unit testing services.
+type mockCallRecordsRepository struct {
+	InsertFunc   func(data entities.CallRecordDataModel) error
+	FindByIDFunc func(id string) (*entities.CallRecordDataModel, error)
+	FindAllFunc  func() (*[]entities.CallRecordDataModel, error)
+	UpdateFunc   func(id string, data entities.CallRecordDataModel) error
+	DeleteFunc   func(id string) error
+}
+
+func (m *mockCallRecordsRepository) InsertCallRecord(data entities.CallRecordDataModel) error {
+	return m.InsertFunc(data)
+}
+
+func (m *mockCallRecordsRepository) FindByID(id string) (*entities.CallRecordDataModel, error) {
+	return m.FindByIDFunc(id)
+}
+
+func (m *mockCallRecordsRepository) FindAll() (*[]entities.CallRecordDataModel, error) {
+	return m.FindAllFunc()
+}
+
+func (m *mockCallRecordsRepository) UpdateCallRecord(id string, data entities.CallRecordDataModel) error {
+	return m.UpdateFunc(id, data)
+}
+
+func (m *mockCallRecordsRepository) DeleteCallRecord(id string) error {
+	return m.DeleteFunc(id)
+}
+
+func TestCreateCallRecordValidation(t *testing.T) {
+	now := time.Now().UTC()
+	templateID := "tpl-1"
+
+	tests := []struct {
+		name      string
+		setupData func() entities.CallRecordDataModel
+		wantErr   string
+	}{
+		{
+			name: "valid record",
+			setupData: func() entities.CallRecordDataModel {
+				return entities.CallRecordDataModel{
+					PhoneNumber:     "0909722021",
+					AppointmentDate: "2026-06-16",
+					DueDate:         now,
+					UserID:          "user-1",
+					WorkspaceID:     "workspace-1",
+				}
+			},
+			wantErr: "",
+		},
+		{
+			name: "empty phone number",
+			setupData: func() entities.CallRecordDataModel {
+				return entities.CallRecordDataModel{
+					PhoneNumber:     "",
+					AppointmentDate: "2026-06-16",
+					DueDate:         now,
+					UserID:          "user-1",
+					WorkspaceID:     "workspace-1",
+				}
+			},
+			wantErr: "phone_number must not be empty",
+		},
+		{
+			name: "invalid phone number format (wrong prefix)",
+			setupData: func() entities.CallRecordDataModel {
+				return entities.CallRecordDataModel{
+					PhoneNumber:     "1909722021",
+					AppointmentDate: "2026-06-16",
+					DueDate:         now,
+					UserID:          "user-1",
+					WorkspaceID:     "workspace-1",
+				}
+			},
+			wantErr: "phone_number must be in format 0909722021",
+		},
+		{
+			name: "invalid phone number format (too short)",
+			setupData: func() entities.CallRecordDataModel {
+				return entities.CallRecordDataModel{
+					PhoneNumber:     "090972202",
+					AppointmentDate: "2026-06-16",
+					DueDate:         now,
+					UserID:          "user-1",
+					WorkspaceID:     "workspace-1",
+				}
+			},
+			wantErr: "phone_number must be in format 0909722021",
+		},
+		{
+			name: "invalid phone number format (too long)",
+			setupData: func() entities.CallRecordDataModel {
+				return entities.CallRecordDataModel{
+					PhoneNumber:     "09097220210",
+					AppointmentDate: "2026-06-16",
+					DueDate:         now,
+					UserID:          "user-1",
+					WorkspaceID:     "workspace-1",
+				}
+			},
+			wantErr: "phone_number must be in format 0909722021",
+		},
+		{
+			name: "negative amount",
+			setupData: func() entities.CallRecordDataModel {
+				return entities.CallRecordDataModel{
+					PhoneNumber:     "0909722021",
+					AppointmentDate: "2026-06-16",
+					DueDate:         now,
+					UserID:          "user-1",
+					WorkspaceID:     "workspace-1",
+					Amount:          -10.5,
+				}
+			},
+			wantErr: "amount must not be negative",
+		},
+		{
+			name: "invalid appointment date format",
+			setupData: func() entities.CallRecordDataModel {
+				return entities.CallRecordDataModel{
+					PhoneNumber:     "0909722021",
+					AppointmentDate: "16-06-2026",
+					DueDate:         now,
+					UserID:          "user-1",
+					WorkspaceID:     "workspace-1",
+				}
+			},
+			wantErr: "appointment_date must be in YYYY-MM-DD format",
+		},
+		{
+			name: "empty due date",
+			setupData: func() entities.CallRecordDataModel {
+				return entities.CallRecordDataModel{
+					PhoneNumber:     "0909722021",
+					AppointmentDate: "2026-06-16",
+					DueDate:         time.Time{},
+					UserID:          "user-1",
+					WorkspaceID:     "workspace-1",
+				}
+			},
+			wantErr: "",
+		},
+		{
+			name: "empty appointment date",
+			setupData: func() entities.CallRecordDataModel {
+				return entities.CallRecordDataModel{
+					PhoneNumber:     "0909722021",
+					AppointmentDate: "",
+					DueDate:         now,
+					UserID:          "user-1",
+					WorkspaceID:     "workspace-1",
+				}
+			},
+			wantErr: "",
+		},
+		{
+			name: "empty user id",
+			setupData: func() entities.CallRecordDataModel {
+				return entities.CallRecordDataModel{
+					PhoneNumber:     "0909722021",
+					AppointmentDate: "2026-06-16",
+					DueDate:         now,
+					UserID:          "",
+					WorkspaceID:     "workspace-1",
+				}
+			},
+			wantErr: "user_id must not be empty",
+		},
+		{
+			name: "empty workspace id",
+			setupData: func() entities.CallRecordDataModel {
+				return entities.CallRecordDataModel{
+					PhoneNumber:     "0909722021",
+					AppointmentDate: "2026-06-16",
+					DueDate:         now,
+					UserID:          "user-1",
+					WorkspaceID:     "",
+				}
+			},
+			wantErr: "workspace_id must not be empty",
+		},
+		{
+			name: "negative call duration",
+			setupData: func() entities.CallRecordDataModel {
+				return entities.CallRecordDataModel{
+					PhoneNumber:     "0909722021",
+					AppointmentDate: "2026-06-16",
+					DueDate:         now,
+					UserID:          "user-1",
+					WorkspaceID:     "workspace-1",
+					CallDuration:    -5,
+				}
+			},
+			wantErr: "call_duration must not be negative",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := &mockCallRecordsRepository{
+				InsertFunc: func(data entities.CallRecordDataModel) error {
+					// Check default status behavior
+					if tt.name == "valid record" {
+						assert.Equal(t, entities.StatusPending, data.Status)
+					}
+					return nil
+				},
+			}
+			sv := NewCallRecordsService(mockRepo)
+			data := tt.setupData()
+			data.TemplateID = &templateID
+
+			err := sv.CreateCallRecord(data)
+			if tt.wantErr != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
