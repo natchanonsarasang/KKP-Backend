@@ -28,7 +28,7 @@ type IUsersRepository interface {
 func NewUsersRepository(db *MongoDB) IUsersRepository {
 	return &usersRepository{
 		Context:    db.Context,
-		Collection: db.MongoDB.Database(os.Getenv("DATABASE_NAME")).Collection("users"),
+		Collection: db.MongoDB.Database(os.Getenv("DATABASE_NAME")).Collection("workspace_members"),
 	}
 }
 
