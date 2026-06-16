@@ -1,6 +1,10 @@
 package gateways
 
-import "github.com/gofiber/fiber/v2"
+import (
+	"go-fiber-template/src/middlewares"
+
+	"github.com/gofiber/fiber/v2"
+)
 
 func GatewayUsers(gateway HTTPGateway, app *fiber.App) {
 	api := app.Group("/api/v1/users")
@@ -37,4 +41,14 @@ func GatewayCallAttempts(gateway HTTPGateway, app *fiber.App) {
 	api.Get("/:id", gateway.GetCallAttemptByID)
 	api.Put("/:id", gateway.UpdateCallAttempt)
 	api.Delete("/:id", gateway.DeleteCallAttempt)
+}
+
+func GatewayCallSessions(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/call-sessions", middlewares.SetJWtHeaderHandler())
+
+	api.Post("/", gateway.CreateCallSession)
+	api.Get("/", gateway.GetCallSessions)
+	api.Get("/:id", gateway.GetCallSessionByID)
+	api.Put("/:id", gateway.UpdateCallSession)
+	api.Delete("/:id", gateway.DeleteCallSession)
 }
