@@ -11,11 +11,12 @@ import (
 
 // mockCallRecordsRepository implements repositories.ICallRecordsRepository for unit testing services.
 type mockCallRecordsRepository struct {
-	InsertFunc   func(data entities.CallRecordDataModel) error
-	FindByIDFunc func(id string) (*entities.CallRecordDataModel, error)
-	FindAllFunc  func() (*[]entities.CallRecordDataModel, error)
-	UpdateFunc   func(id string, data entities.CallRecordDataModel) error
-	DeleteFunc   func(id string) error
+	InsertFunc       func(data entities.CallRecordDataModel) error
+	FindByIDFunc     func(id string) (*entities.CallRecordDataModel, error)
+	FindByUserIDFunc func(userID string) (*[]entities.CallRecordDataModel, error)
+	FindAllFunc      func() (*[]entities.CallRecordDataModel, error)
+	UpdateFunc       func(id string, data entities.CallRecordDataModel) error
+	DeleteFunc       func(id string) error
 }
 
 func (m *mockCallRecordsRepository) InsertCallRecord(data entities.CallRecordDataModel) error {
@@ -24,6 +25,10 @@ func (m *mockCallRecordsRepository) InsertCallRecord(data entities.CallRecordDat
 
 func (m *mockCallRecordsRepository) FindByID(id string) (*entities.CallRecordDataModel, error) {
 	return m.FindByIDFunc(id)
+}
+
+func (m *mockCallRecordsRepository) FindByUserID(userID string) (*[]entities.CallRecordDataModel, error) {
+	return m.FindByUserIDFunc(userID)
 }
 
 func (m *mockCallRecordsRepository) FindAll() (*[]entities.CallRecordDataModel, error) {
@@ -232,3 +237,64 @@ func TestCreateCallRecordValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestCallRecordOwnershipValidation(t *testing.T) {
+	templateID := "tpl-123"
+	existingRecord := &entities.CallRecordDataModel{
+		ID:              "rec-123",
+		UserID:          "owner-user",
+		PhoneNumber:     "0909722021",
+		AppointmentDate: "2026-06-16",
+		DueDate:         time.Now(),
+		WorkspaceID:     "ws-123",
+		TemplateID:      &templateID,
+	}
+
+	mockRepo := &mockCallRecordsRepository{
+		FindByIDFunc: func(id string) (*entities.CallRecordDataModel, error) {
+			if id == "rec-123" {
+				return existingRecord, nil
+			}
+			return nil, nil
+		},
+		UpdateFunc: func(id string, data entities.CallRecordDataModel) error {
+			return nil
+		},
+		DeleteFunc: func(id string) error {
+			return nil
+		},
+	}
+
+	sv := NewCallRecordsService(mockRepo)
+
+	// 1. Get record by correct user
+	rec, err := sv.GetCallRecordByIDByUser("rec-123", "owner-user")
+	assert.NoError(t, err)
+	assert.NotNil(t, rec)
+	assert.Equal(t, "owner-user", rec.UserID)
+
+	// 2. Get record by incorrect user (unauthorized)
+	rec, err = sv.GetCallRecordByIDByUser("rec-123", "unauthorized-user")
+	assert.Error(t, err)
+	assert.Nil(t, rec)
+	assert.Contains(t, err.Error(), "unauthorized")
+
+	// 3. Update record by correct user
+	err = sv.UpdateCallRecordByUser("rec-123", "owner-user", *existingRecord)
+	assert.NoError(t, err)
+
+	// 4. Update record by incorrect user (unauthorized)
+	err = sv.UpdateCallRecordByUser("rec-123", "unauthorized-user", *existingRecord)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unauthorized")
+
+	// 5. Delete record by correct user
+	err = sv.DeleteCallRecordByUser("rec-123", "owner-user")
+	assert.NoError(t, err)
+
+	// 6. Delete record by incorrect user (unauthorized)
+	err = sv.DeleteCallRecordByUser("rec-123", "unauthorized-user")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unauthorized")
+}
+

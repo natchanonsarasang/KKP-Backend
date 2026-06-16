@@ -9,7 +9,6 @@ import (
 
 // GatewayCallRecords registers the HTTP routes for Call Records and applies the JWT auth middleware to protect them.
 func GatewayCallRecords(gateway HTTPGateway, app *fiber.App) {
-	// Secure all CRUD endpoints by default to protect sensitive call logs
 	api := app.Group("/api/v1/call-records", middlewares.SetJWtHeaderHandler())
 
 	api.Post("/", gateway.CreateCallRecord)
@@ -20,12 +19,22 @@ func GatewayCallRecords(gateway HTTPGateway, app *fiber.App) {
 }
 
 func (h *HTTPGateway) CreateCallRecord(ctx *fiber.Ctx) error {
+	tokenDetails, err := middlewares.DecodeJWTToken(ctx)
+	if err != nil {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(entities.ResponseMessage{
+			Message: "Unauthorized: " + err.Error(),
+		})
+	}
+
 	var bodyData entities.CallRecordDataModel
 	if err := ctx.BodyParser(&bodyData); err != nil {
 		return ctx.Status(fiber.StatusUnprocessableEntity).JSON(entities.ResponseMessage{
 			Message: "invalid json body: " + err.Error(),
 		})
 	}
+
+	// Bind the call record to the authenticated user's ID
+	bodyData.UserID = tokenDetails.UserID
 
 	if err := h.CallRecordsService.CreateCallRecord(bodyData); err != nil {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseModel{
@@ -39,6 +48,13 @@ func (h *HTTPGateway) CreateCallRecord(ctx *fiber.Ctx) error {
 }
 
 func (h *HTTPGateway) GetCallRecordByID(ctx *fiber.Ctx) error {
+	tokenDetails, err := middlewares.DecodeJWTToken(ctx)
+	if err != nil {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(entities.ResponseMessage{
+			Message: "Unauthorized: " + err.Error(),
+		})
+	}
+
 	id := ctx.Params("id")
 	if id == "" {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{
@@ -46,9 +62,9 @@ func (h *HTTPGateway) GetCallRecordByID(ctx *fiber.Ctx) error {
 		})
 	}
 
-	data, err := h.CallRecordsService.GetCallRecordByID(id)
+	data, err := h.CallRecordsService.GetCallRecordByIDByUser(id, tokenDetails.UserID)
 	if err != nil {
-		return ctx.Status(fiber.StatusInternalServerError).JSON(entities.ResponseModel{
+		return ctx.Status(fiber.StatusForbidden).JSON(entities.ResponseModel{
 			Message: "cannot retrieve call record: " + err.Error(),
 		})
 	}
@@ -65,7 +81,14 @@ func (h *HTTPGateway) GetCallRecordByID(ctx *fiber.Ctx) error {
 }
 
 func (h *HTTPGateway) GetAllCallRecords(ctx *fiber.Ctx) error {
-	data, err := h.CallRecordsService.GetAllCallRecords()
+	tokenDetails, err := middlewares.DecodeJWTToken(ctx)
+	if err != nil {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(entities.ResponseMessage{
+			Message: "Unauthorized: " + err.Error(),
+		})
+	}
+
+	data, err := h.CallRecordsService.GetAllCallRecordsByUser(tokenDetails.UserID)
 	if err != nil {
 		return ctx.Status(fiber.StatusInternalServerError).JSON(entities.ResponseModel{
 			Message: "cannot retrieve call records: " + err.Error(),
@@ -79,6 +102,13 @@ func (h *HTTPGateway) GetAllCallRecords(ctx *fiber.Ctx) error {
 }
 
 func (h *HTTPGateway) UpdateCallRecord(ctx *fiber.Ctx) error {
+	tokenDetails, err := middlewares.DecodeJWTToken(ctx)
+	if err != nil {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(entities.ResponseMessage{
+			Message: "Unauthorized: " + err.Error(),
+		})
+	}
+
 	id := ctx.Params("id")
 	if id == "" {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{
@@ -93,7 +123,7 @@ func (h *HTTPGateway) UpdateCallRecord(ctx *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.CallRecordsService.UpdateCallRecord(id, bodyData); err != nil {
+	if err := h.CallRecordsService.UpdateCallRecordByUser(id, tokenDetails.UserID, bodyData); err != nil {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseModel{
 			Message: "cannot update call record: " + err.Error(),
 		})
@@ -105,6 +135,13 @@ func (h *HTTPGateway) UpdateCallRecord(ctx *fiber.Ctx) error {
 }
 
 func (h *HTTPGateway) DeleteCallRecord(ctx *fiber.Ctx) error {
+	tokenDetails, err := middlewares.DecodeJWTToken(ctx)
+	if err != nil {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(entities.ResponseMessage{
+			Message: "Unauthorized: " + err.Error(),
+		})
+	}
+
 	id := ctx.Params("id")
 	if id == "" {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{
@@ -112,7 +149,7 @@ func (h *HTTPGateway) DeleteCallRecord(ctx *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.CallRecordsService.DeleteCallRecord(id); err != nil {
+	if err := h.CallRecordsService.DeleteCallRecordByUser(id, tokenDetails.UserID); err != nil {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseModel{
 			Message: "cannot delete call record: " + err.Error(),
 		})
