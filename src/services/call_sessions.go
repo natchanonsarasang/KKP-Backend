@@ -192,11 +192,10 @@ func (sv *callSessionsService) UpdateCallSessionByUser(callerUserID string, id s
 		return errors.New("unauthorized: user does not own this resource")
 	}
 
-	if data.UserID == "" {
-		data.UserID = callerUserID
-	} else if data.UserID != callerUserID {
-		return errors.New("unauthorized: cannot change owner of this resource")
-	}
+	// Ensure ID, UserID, and WorkspaceID cannot be changed
+	data.ID = id
+	data.UserID = callerUserID
+	data.WorkspaceID = existing.WorkspaceID
 
 	return sv.UpdateCallSession(id, data)
 }

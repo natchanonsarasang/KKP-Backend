@@ -158,9 +158,10 @@ func (sv *callRecordsService) UpdateCallRecordByUser(id string, userID string, d
 		return errors.New("unauthorized: you do not own this call record")
 	}
 
-	// Ensure ID and UserID cannot be changed
+	// Ensure ID, UserID, and WorkspaceID cannot be changed
 	data.ID = id
 	data.UserID = userID
+	data.WorkspaceID = existing.WorkspaceID
 	data.UpdatedAt = time.Now().UTC()
 
 	// Validate the updated record
