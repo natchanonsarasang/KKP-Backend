@@ -12,15 +12,18 @@ func TestCallRecordDataModel(t *testing.T) {
 	now := time.Now().UTC()
 	dueDate := now.Add(24 * time.Hour)
 
+	templateID := "tpl-123"
+	var resultData interface{} = map[string]interface{}{"key": "value"}
+
 	record := CallRecordDataModel{
 		ID:              "c623c91c-1f5f-4027-a068-bd4f8286a111",
-		TemplateID:      "tpl-123",
+		TemplateID:      &templateID,
 		PhoneNumber:     "+1234567890",
 		AppointmentDate: "2026-06-16",
 		AppointmentTime: "11:15:00",
 		Status:          StatusConfirmed,
 		BotnoiCallID:    "botnoi-call-xyz",
-		ResultData:      map[string]any{"key": "value"},
+		ResultData:      &resultData,
 		DueDate:         dueDate,
 		Amount:          150.50,
 		UserID:          "usr-999",
@@ -42,15 +45,17 @@ func TestCallRecordDataModel(t *testing.T) {
 
 	// Validate fields
 	assert.Equal(t, record.ID, unmarshaled.ID)
-	assert.Equal(t, record.TemplateID, unmarshaled.TemplateID)
+	assert.NotNil(t, unmarshaled.TemplateID)
+	assert.Equal(t, *record.TemplateID, *unmarshaled.TemplateID)
 	assert.Equal(t, record.PhoneNumber, unmarshaled.PhoneNumber)
 	assert.Equal(t, record.AppointmentDate, unmarshaled.AppointmentDate)
 	assert.Equal(t, record.AppointmentTime, unmarshaled.AppointmentTime)
 	assert.Equal(t, record.Status, unmarshaled.Status)
 	assert.Equal(t, record.BotnoiCallID, unmarshaled.BotnoiCallID)
 
-	// Interface map assertion requires type assertion check or comparison
-	resultDataMap, ok := unmarshaled.ResultData.(map[string]interface{})
+	// Interface map assertion requires pointer dereference check
+	assert.NotNil(t, unmarshaled.ResultData)
+	resultDataMap, ok := (*unmarshaled.ResultData).(map[string]interface{})
 	assert.True(t, ok)
 	assert.Equal(t, "value", resultDataMap["key"])
 
