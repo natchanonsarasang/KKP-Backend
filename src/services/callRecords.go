@@ -18,13 +18,13 @@ type callRecordsService struct {
 type ICallRecordsService interface {
 	CreateCallRecord(data entities.CallRecordDataModel) error
 	GetCallRecordByIDByUser(id string, userID string) (*entities.CallRecordDataModel, error)
-	GetAllCallRecordsByUser(userID string) (*[]entities.CallRecordDataModel, error)
+	GetAllCallRecordsByUser(userID string, filter entities.CallRecordFilter) (*[]entities.CallRecordDataModel, error)
 	UpdateCallRecordByUser(id string, userID string, data entities.CallRecordDataModel) error
 	DeleteCallRecordByUser(id string, userID string) error
 
 	// Direct/System CRUD methods (e.g. for voicebot webhook)
 	GetCallRecordByID(id string) (*entities.CallRecordDataModel, error)
-	GetAllCallRecords() (*[]entities.CallRecordDataModel, error)
+	GetAllCallRecords(filter entities.CallRecordFilter) (*[]entities.CallRecordDataModel, error)
 	UpdateCallRecord(id string, data entities.CallRecordDataModel) error
 	DeleteCallRecord(id string) error
 }
@@ -59,8 +59,8 @@ func (sv *callRecordsService) GetCallRecordByID(id string) (*entities.CallRecord
 	return sv.Repo.FindByID(id)
 }
 
-func (sv *callRecordsService) GetAllCallRecords() (*[]entities.CallRecordDataModel, error) {
-	return sv.Repo.FindAll()
+func (sv *callRecordsService) GetAllCallRecords(filter entities.CallRecordFilter) (*[]entities.CallRecordDataModel, error) {
+	return sv.Repo.FindByFilter(filter)
 }
 
 func (sv *callRecordsService) UpdateCallRecord(id string, data entities.CallRecordDataModel) error {
@@ -127,11 +127,15 @@ func (sv *callRecordsService) GetCallRecordByIDByUser(id string, userID string) 
 	return record, nil
 }
 
-func (sv *callRecordsService) GetAllCallRecordsByUser(userID string) (*[]entities.CallRecordDataModel, error) {
+func (sv *callRecordsService) GetAllCallRecordsByUser(userID string, filter entities.CallRecordFilter) (*[]entities.CallRecordDataModel, error) {
 	if userID == "" {
 		return nil, errors.New("unauthorized: missing user id")
 	}
-	return sv.Repo.FindByUserID(userID)
+	if filter.UserID != "" && filter.UserID != userID {
+		return nil, errors.New("unauthorized: cannot filter by other user ID")
+	}
+	filter.UserID = userID
+	return sv.Repo.FindByFilter(filter)
 }
 
 func (sv *callRecordsService) UpdateCallRecordByUser(id string, userID string, data entities.CallRecordDataModel) error {
@@ -210,7 +214,7 @@ func (sv *callRecordsService) validateCallRecord(data *entities.CallRecordDataMo
 		case entities.StatusConfirmed, entities.StatusDeclined, entities.StatusNoResponse,
 			entities.StatusNoAnswer, entities.StatusHangedUp, entities.StatusPending,
 			entities.StatusCompleted, entities.StatusBusy, entities.StatusFailed,
-			entities.StatusRejected, entities.StatusVoicemail:
+			entities.StatusRejected, entities.StatusVoicemail, entities.StatusCalling:
 			// Valid
 		default:
 			return errors.New("invalid status value")

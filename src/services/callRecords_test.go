@@ -14,6 +14,7 @@ type mockCallRecordsRepository struct {
 	InsertFunc       func(data entities.CallRecordDataModel) error
 	FindByIDFunc     func(id string) (*entities.CallRecordDataModel, error)
 	FindByUserIDFunc func(userID string) (*[]entities.CallRecordDataModel, error)
+	FindByFilterFunc func(filter entities.CallRecordFilter) (*[]entities.CallRecordDataModel, error)
 	FindAllFunc      func() (*[]entities.CallRecordDataModel, error)
 	UpdateFunc       func(id string, data entities.CallRecordDataModel) error
 	DeleteFunc       func(id string) error
@@ -29,6 +30,10 @@ func (m *mockCallRecordsRepository) FindByID(id string) (*entities.CallRecordDat
 
 func (m *mockCallRecordsRepository) FindByUserID(userID string) (*[]entities.CallRecordDataModel, error) {
 	return m.FindByUserIDFunc(userID)
+}
+
+func (m *mockCallRecordsRepository) FindByFilter(filter entities.CallRecordFilter) (*[]entities.CallRecordDataModel, error) {
+	return m.FindByFilterFunc(filter)
 }
 
 func (m *mockCallRecordsRepository) FindAll() (*[]entities.CallRecordDataModel, error) {
@@ -296,5 +301,36 @@ func TestCallRecordOwnershipValidation(t *testing.T) {
 	err = sv.DeleteCallRecordByUser("rec-123", "unauthorized-user")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unauthorized")
+}
+
+func TestCallRecordsServiceFilter(t *testing.T) {
+	mockRepo := &mockCallRecordsRepository{
+		FindByFilterFunc: func(filter entities.CallRecordFilter) (*[]entities.CallRecordDataModel, error) {
+			assert.Equal(t, "user-owner", filter.UserID)
+			assert.Equal(t, "pending", string(filter.Status))
+			assert.Equal(t, "botnoi-123", filter.BotnoiCallID)
+			return &[]entities.CallRecordDataModel{
+				{ID: "rec-1", UserID: "user-owner", Status: entities.StatusPending, BotnoiCallID: "botnoi-123"},
+			}, nil
+		},
+	}
+
+	sv := NewCallRecordsService(mockRepo)
+
+	// 1. Test GetAllCallRecordsByUser success with filter
+	results, err := sv.GetAllCallRecordsByUser("user-owner", entities.CallRecordFilter{
+		Status:       "pending",
+		BotnoiCallID: "botnoi-123",
+	})
+	assert.NoError(t, err)
+	assert.NotNil(t, results)
+	assert.Len(t, *results, 1)
+
+	// 2. Test GetAllCallRecordsByUser mismatched filter user ID -> error
+	_, err = sv.GetAllCallRecordsByUser("user-owner", entities.CallRecordFilter{
+		UserID: "user-other",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unauthorized: cannot filter by other user ID")
 }
 

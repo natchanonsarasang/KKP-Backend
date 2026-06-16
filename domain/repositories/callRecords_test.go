@@ -130,6 +130,25 @@ func TestCallRecordsRepositoryCRUD(t *testing.T) {
 	}
 	assert.True(t, foundUserRec)
 
+	// 4.75. FindByFilter
+	filterObj := entities.CallRecordFilter{
+		UserID:       "test-user",
+		WorkspaceID:  "test-workspace",
+		Status:       string(entities.StatusCompleted),
+		BotnoiCallID: "test-botnoi-id",
+	}
+	filterRecords, err := repo.FindByFilter(filterObj)
+	assert.NoError(t, err)
+	assert.NotNil(t, filterRecords)
+	foundFilterRec := false
+	for _, r := range *filterRecords {
+		if r.ID == testID {
+			foundFilterRec = true
+			break
+		}
+	}
+	assert.True(t, foundFilterRec)
+
 	// 5. Delete
 	err = repo.DeleteCallRecord(testID)
 	assert.NoError(t, err)
