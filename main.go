@@ -37,14 +37,16 @@ func main() {
 	callListItemRepo := repo.NewCallListItemsRepository(mongodb)
 	callAttemptRepo := repo.NewCallAttemptsRepository(mongodb)
 	callSessionRepo := repo.NewCallSessionsRepository(mongodb)
+	callRecordsRepo := repo.NewCallRecordsRepository(mongodb)
 
 	sv0 := sv.NewUsersService(userRepo)
 	sv1 := sv.NewDebtorsService(debtorRepo, sv0)
 	sv2 := sv.NewCallListItemsService(callListItemRepo, sv0)
 	sv3 := sv.NewCallAttemptsService(callAttemptRepo, callListItemRepo, sv0)
 	sv4 := sv.NewCallSessionsService(callSessionRepo)
+	callRecordsSv := sv.NewCallRecordsService(callRecordsRepo)
 
-	gw.NewHTTPGateway(app, sv0, sv1, sv2, sv3, sv4)
+	gw.NewHTTPGateway(app, sv0, callRecordsSv, sv1, sv2, sv3, sv4)
 
 	PORT := os.Getenv("PORT")
 

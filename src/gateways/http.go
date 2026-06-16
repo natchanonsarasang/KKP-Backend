@@ -8,6 +8,7 @@ import (
 
 type HTTPGateway struct {
 	UserService         service.IUsersService
+	CallRecordsService  service.ICallRecordsService
 	DebtorService       service.IDebtorsService
 	CallListItemService service.ICallListItemsService
 	CallAttemptService  service.ICallAttemptsService
@@ -16,7 +17,7 @@ type HTTPGateway struct {
 
 func NewHTTPGateway(
 	app *fiber.App,
-	users service.IUsersService,
+	users service.IUsersService, callRecords service.ICallRecordsService,
 	debtors service.IDebtorsService,
 	items service.ICallListItemsService,
 	attempts service.ICallAttemptsService,
@@ -28,6 +29,7 @@ func NewHTTPGateway(
 		CallListItemService: items,
 		CallAttemptService:  attempts,
 		CallSessionService:  sessions,
+		CallRecordsService:  callRecords,
 	}
 
 	GatewayUsers(*gateway, app)
@@ -35,4 +37,5 @@ func NewHTTPGateway(
 	GatewayCallListItems(*gateway, app)
 	GatewayCallAttempts(*gateway, app)
 	GatewayCallSessions(*gateway, app)
+	GatewayCallRecords(*gateway, app)
 }
