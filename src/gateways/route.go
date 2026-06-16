@@ -42,3 +42,13 @@ func GatewayCallAttempts(gateway HTTPGateway, app *fiber.App) {
 	api.Put("/:id", gateway.UpdateCallAttempt)
 	api.Delete("/:id", gateway.DeleteCallAttempt)
 }
+
+func GatewayCallSessions(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/call-sessions", middlewares.SetJWtHeaderHandler())
+
+	api.Post("/", gateway.CreateCallSession)
+	api.Get("/", gateway.GetCallSessions)
+	api.Get("/:id", gateway.GetCallSessionByID)
+	api.Put("/:id", gateway.UpdateCallSession)
+	api.Delete("/:id", gateway.DeleteCallSession)
+}

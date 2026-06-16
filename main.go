@@ -36,19 +36,15 @@ func main() {
 	debtorRepo := repo.NewDebtorsRepository(mongodb)
 	callListItemRepo := repo.NewCallListItemsRepository(mongodb)
 	callAttemptRepo := repo.NewCallAttemptsRepository(mongodb)
+	callSessionRepo := repo.NewCallSessionsRepository(mongodb)
 
 	sv0 := sv.NewUsersService(userRepo)
 	sv1 := sv.NewDebtorsService(debtorRepo, sv0)
 	sv2 := sv.NewCallListItemsService(callListItemRepo, sv0)
 	sv3 := sv.NewCallAttemptsService(callAttemptRepo, callListItemRepo, sv0)
+	sv4 := sv.NewCallSessionsService(callSessionRepo)
 
-	gw.NewHTTPGateway(app, sv0, sv1, sv2, sv3)
-// 	//  main.go เพื่อสร้าง Token เทส
-//    tokenDetails, _ := middlewares.GenerateJWTToken("test-user-123", "test-uuid-456")
-//    log.Println("========================================")
-//    log.Println("TOKEN สำหรับเทส :")                                                                  
-//    log.Println(*tokenDetails.Token)
-//    log.Println("========================================")
+	gw.NewHTTPGateway(app, sv0, sv1, sv2, sv3, sv4)
 
 	PORT := os.Getenv("PORT")
 
@@ -57,6 +53,5 @@ func main() {
 	}
 
 	app.Listen(":" + PORT)
-
 
 }

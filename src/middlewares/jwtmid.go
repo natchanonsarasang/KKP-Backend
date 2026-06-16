@@ -34,9 +34,9 @@ func SetJWtHeaderHandler() fiber.Handler {
 		if len(urlStr) > 0 && urlStr[len(urlStr)-1] == '/' {
 			urlStr = urlStr[:len(urlStr)-1]
 		}
-		config.JWKSetURLs = []string{urlStr + "/auth/v1/.well-known/jwks.json"}
+		jwksPath := urlStr + "/auth/v1/.well-known/jwks.json"
+		config.JWKSetURLs = []string{jwksPath}
 	} else {
-		// Fallback to symmetric shared secret
 		config.SigningKey = jwtware.SigningKey{
 			Key:    []byte(os.Getenv("JWT_SECRET_KEY")),
 			JWTAlg: jwtware.HS256,
