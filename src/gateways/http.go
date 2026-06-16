@@ -8,6 +8,7 @@ import (
 
 type HTTPGateway struct {
 	UserService         service.IUsersService
+	CallRecordsService  service.ICallRecordsService
 	DebtorService       service.IDebtorsService
 	CallListItemService service.ICallListItemsService
 	CallAttemptService  service.ICallAttemptsService
