@@ -17,6 +17,12 @@ type callRecordsService struct {
 
 type ICallRecordsService interface {
 	CreateCallRecord(data entities.CallRecordDataModel) error
+	GetCallRecordByIDByUser(id string, userID string) (*entities.CallRecordDataModel, error)
+	GetAllCallRecordsByUser(userID string) (*[]entities.CallRecordDataModel, error)
+	UpdateCallRecordByUser(id string, userID string, data entities.CallRecordDataModel) error
+	DeleteCallRecordByUser(id string, userID string) error
+
+	// Direct/System CRUD methods (e.g. for voicebot webhook)
 	GetCallRecordByID(id string) (*entities.CallRecordDataModel, error)
 	GetAllCallRecords() (*[]entities.CallRecordDataModel, error)
 	UpdateCallRecord(id string, data entities.CallRecordDataModel) error
@@ -95,6 +101,90 @@ func (sv *callRecordsService) DeleteCallRecord(id string) error {
 	}
 	if existing == nil {
 		return errors.New("call record not found")
+	}
+
+	return sv.Repo.DeleteCallRecord(id)
+}
+
+func (sv *callRecordsService) GetCallRecordByIDByUser(id string, userID string) (*entities.CallRecordDataModel, error) {
+	if id == "" {
+		return nil, errors.New("id must not be empty")
+	}
+	if userID == "" {
+		return nil, errors.New("unauthorized: missing user id")
+	}
+
+	record, err := sv.Repo.FindByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if record == nil {
+		return nil, nil
+	}
+	if record.UserID != userID {
+		return nil, errors.New("unauthorized: you do not own this call record")
+	}
+	return record, nil
+}
+
+func (sv *callRecordsService) GetAllCallRecordsByUser(userID string) (*[]entities.CallRecordDataModel, error) {
+	if userID == "" {
+		return nil, errors.New("unauthorized: missing user id")
+	}
+	return sv.Repo.FindByUserID(userID)
+}
+
+func (sv *callRecordsService) UpdateCallRecordByUser(id string, userID string, data entities.CallRecordDataModel) error {
+	if id == "" {
+		return errors.New("id must not be empty")
+	}
+	if userID == "" {
+		return errors.New("unauthorized: missing user id")
+	}
+
+	// Fetch existing record to verify ownership
+	existing, err := sv.Repo.FindByID(id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return errors.New("call record not found")
+	}
+	if existing.UserID != userID {
+		return errors.New("unauthorized: you do not own this call record")
+	}
+
+	// Ensure ID and UserID cannot be changed
+	data.ID = id
+	data.UserID = userID
+	data.UpdatedAt = time.Now().UTC()
+
+	// Validate the updated record
+	if err := sv.validateCallRecord(&data); err != nil {
+		return err
+	}
+
+	return sv.Repo.UpdateCallRecord(id, data)
+}
+
+func (sv *callRecordsService) DeleteCallRecordByUser(id string, userID string) error {
+	if id == "" {
+		return errors.New("id must not be empty")
+	}
+	if userID == "" {
+		return errors.New("unauthorized: missing user id")
+	}
+
+	// Fetch existing record to verify ownership
+	existing, err := sv.Repo.FindByID(id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return errors.New("call record not found")
+	}
+	if existing.UserID != userID {
+		return errors.New("unauthorized: you do not own this call record")
 	}
 
 	return sv.Repo.DeleteCallRecord(id)

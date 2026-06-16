@@ -117,6 +117,19 @@ func TestCallRecordsRepositoryCRUD(t *testing.T) {
 	}
 	assert.True(t, foundInList)
 
+	// 4.5. FindByUserID
+	userRecords, err := repo.FindByUserID("test-user")
+	assert.NoError(t, err)
+	assert.NotNil(t, userRecords)
+	foundUserRec := false
+	for _, r := range *userRecords {
+		if r.ID == testID {
+			foundUserRec = true
+			break
+		}
+	}
+	assert.True(t, foundUserRec)
+
 	// 5. Delete
 	err = repo.DeleteCallRecord(testID)
 	assert.NoError(t, err)

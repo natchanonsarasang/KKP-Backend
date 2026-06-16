@@ -20,6 +20,7 @@ type callRecordsRepository struct {
 type ICallRecordsRepository interface {
 	InsertCallRecord(data entities.CallRecordDataModel) error
 	FindByID(id string) (*entities.CallRecordDataModel, error)
+	FindByUserID(userID string) (*[]entities.CallRecordDataModel, error)
 	FindAll() (*[]entities.CallRecordDataModel, error)
 	UpdateCallRecord(id string, data entities.CallRecordDataModel) error
 	DeleteCallRecord(id string) error
@@ -96,4 +97,24 @@ func (repo *callRecordsRepository) DeleteCallRecord(id string) error {
 		return err
 	}
 	return nil
+}
+
+func (repo *callRecordsRepository) FindByUserID(userID string) (*[]entities.CallRecordDataModel, error) {
+	filter := bson.M{"user_id": userID}
+	var records []entities.CallRecordDataModel
+
+	cursor, err := repo.Collection.Find(repo.Context, filter)
+	if err != nil {
+		fiberlog.Errorf("CallRecords -> FindByUserID: %s \n", err)
+		return nil, err
+	}
+	defer cursor.Close(repo.Context)
+
+	err = cursor.All(repo.Context, &records)
+	if err != nil {
+		fiberlog.Errorf("CallRecords -> FindByUserID decoding: %s \n", err)
+		return nil, err
+	}
+
+	return &records, nil
 }
