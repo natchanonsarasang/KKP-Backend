@@ -18,10 +18,13 @@ func (h *HTTPGateway) GetCallAttemptsByWorkspace(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "invalid workspace id"})
 	}
 
+	limit := ctx.QueryInt("limit")
+
 	filter := entities.CallAttemptFilter{
 		WorkspaceID:    workspaceID,
 		CallListItemID: ctx.Query("call_list_item_id"),
 		Status:         ctx.Query("status"),
+		Limit:          int64(limit),
 	}
 
 	data, err := h.CallAttemptService.GetAttemptsByFilterByUser(tokenData.UserID, filter)
@@ -124,32 +127,7 @@ func (h *HTTPGateway) DeleteCallAttempt(ctx *fiber.Ctx) error {
 	return ctx.Status(fiber.StatusOK).JSON(entities.ResponseModel{Message: "success"})
 }
 
-func (h *HTTPGateway) GetOneCallAttempt(ctx *fiber.Ctx) error {
-	tokenData, err := middlewares.DecodeJWTToken(ctx)
-	if err != nil {
-		return err
-	}
 
-	workspaceID := ctx.Query("workspace_id")
-	if workspaceID == "" {
-		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "workspace_id query parameter is required"})
-	}
-
-	filter := entities.CallAttemptFilter{
-		WorkspaceID:    workspaceID,
-		CallListItemID: ctx.Query("call_list_item_id"),
-		Status:         ctx.Query("status"),
-	}
-
-	data, err := h.CallAttemptService.GetOneAttemptByFilterByUser(tokenData.UserID, filter)
-	if err != nil {
-		return ctx.Status(fiber.StatusForbidden).JSON(entities.ResponseMessage{Message: err.Error()})
-	}
-	if data == nil {
-		return ctx.Status(fiber.StatusNotFound).JSON(entities.ResponseMessage{Message: "call attempt not found"})
-	}
-	return ctx.Status(fiber.StatusOK).JSON(entities.ResponseModel{Message: "success", Data: data})
-}
 
 func (h *HTTPGateway) UpdateMultipleCallAttempts(ctx *fiber.Ctx) error {
 	tokenData, err := middlewares.DecodeJWTToken(ctx)

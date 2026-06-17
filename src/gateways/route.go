@@ -31,7 +31,6 @@ func GatewayCallAttempts(gateway HTTPGateway, app *fiber.App) {
 
 	api.Post("/", gateway.CreateCallAttempt)
 	api.Get("/workspace/:workspace_id", gateway.GetCallAttemptsByWorkspace)
-	api.Get("/one", gateway.GetOneCallAttempt)
 	api.Get("/:id", gateway.GetCallAttemptByID)
 	api.Put("/", gateway.UpdateMultipleCallAttempts)
 	api.Put("/:id", gateway.UpdateCallAttempt)
