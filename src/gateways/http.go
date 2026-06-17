@@ -7,13 +7,14 @@ import (
 )
 
 type HTTPGateway struct {
-	CallRecordsService  service.ICallRecordsService
-	DebtorService       service.IDebtorsService
-	CallListItemService service.ICallListItemsService
-	CallAttemptService  service.ICallAttemptsService
-	CallSessionService  service.ICallSessionsService
-	WorkspacesService   service.IWorkspacesService
-	WebhookService      service.IWebhookService
+	CallRecordsService      service.ICallRecordsService
+	DebtorService           service.IDebtorsService
+	CallListItemService     service.ICallListItemsService
+	CallAttemptService      service.ICallAttemptsService
+	CallSessionService      service.ICallSessionsService
+	WorkspacesService       service.IWorkspacesService
+	WebhookService          service.IWebhookService
+	VoicebotMakeCallService service.IVoicebotMakeCallService
 }
 
 func NewHTTPGateway(
@@ -25,15 +26,17 @@ func NewHTTPGateway(
 	attempts service.ICallAttemptsService,
 	sessions service.ICallSessionsService,
 	webhook service.IWebhookService,
+	voicebotMakeCall service.IVoicebotMakeCallService,
 ) {
 	gateway := &HTTPGateway{
-		WorkspacesService:   workspaces,
-		CallRecordsService:  callRecords,
-		DebtorService:       debtors,
-		CallListItemService: items,
-		CallAttemptService:  attempts,
-		CallSessionService:  sessions,
-		WebhookService:      webhook,
+		WorkspacesService:       workspaces,
+		CallRecordsService:      callRecords,
+		DebtorService:           debtors,
+		CallListItemService:     items,
+		CallAttemptService:      attempts,
+		CallSessionService:      sessions,
+		WebhookService:          webhook,
+		VoicebotMakeCallService: voicebotMakeCall,
 	}
 
 	GatewayWorkspaces(*gateway, app)
@@ -43,4 +46,5 @@ func NewHTTPGateway(
 	GatewayCallAttempts(*gateway, app)
 	GatewayCallSessions(*gateway, app)
 	GatewayWebhooks(*gateway, app)
+	GatewayVoicebotMakeCall(*gateway, app)
 }
