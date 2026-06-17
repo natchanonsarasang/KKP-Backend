@@ -90,8 +90,13 @@ func (sv *callAttemptsService) DeleteAttempt(id string) error {
 }
 
 func (sv *callAttemptsService) UpdateAttemptByUser(id string, userID string, workspaceID string, data entities.CallAttemptModel) error {
-	data.ID = id
-	data.UserID = userID
+	// Ensure immutable fields are not modified
+	data.ID = ""
+	data.UserID = ""
+	data.WorkspaceID = ""
+	data.CreatedAt = time.Time{}
+	data.CallListItemID = ""
+
 	data.UpdatedAt = time.Now()
 	return sv.CallAttemptsRepository.UpdateByUser(id, workspaceID, userID, data)
 }
@@ -109,12 +114,19 @@ func (sv *callAttemptsService) GetAttemptsByFilterByUser(userID string, filter e
 }
 
 
-
 func (sv *callAttemptsService) UpdateMultipleAttemptsByUser(userID string, filter entities.CallAttemptFilter, data entities.CallAttemptModel) (int64, error) {
 	if filter.WorkspaceID == "" {
 		return 0, errors.New("workspace_id must not be empty")
 	}
 	filter.UserID = userID
+
+	// Ensure immutable fields are not modified in bulk update
+	data.ID = ""
+	data.UserID = ""
+	data.WorkspaceID = ""
+	data.CreatedAt = time.Time{}
+	data.CallListItemID = ""
+
 	data.UpdatedAt = time.Now()
 	return sv.CallAttemptsRepository.UpdateMultipleByUser(filter, data)
 }
