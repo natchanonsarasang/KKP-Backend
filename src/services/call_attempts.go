@@ -19,6 +19,7 @@ type ICallAttemptsService interface {
 	GetAttemptsByWorkspaceByUser(userID string, workspaceID string) (*[]entities.CallAttemptModel, error)
 	GetAttemptByID(id string) (*entities.CallAttemptModel, error)
 	GetAttemptByIDByUser(id string, userID string, workspaceID string) (*entities.CallAttemptModel, error)
+	GetAttemptsByFilterByUser(userID string, filter entities.CallAttemptFilter) (*[]entities.CallAttemptModel, error)
 	CreateAttempt(data entities.CallAttemptModel) error
 	CreateAttemptByUser(userID string, data entities.CallAttemptModel) error
 	// System Methods
@@ -27,6 +28,7 @@ type ICallAttemptsService interface {
 	// ByUser Methods
 	UpdateAttemptByUser(id string, userID string, workspaceID string, data entities.CallAttemptModel) error
 	DeleteAttemptByUser(id string, userID string, workspaceID string) error
+	UpdateMultipleAttemptsByUser(userID string, filter entities.CallAttemptFilter, data entities.CallAttemptModel) (int64, error)
 }
 
 func NewCallAttemptsService(repo repositories.ICallAttemptsRepository, itemRepo repositories.ICallListItemsRepository) ICallAttemptsService {
@@ -88,12 +90,43 @@ func (sv *callAttemptsService) DeleteAttempt(id string) error {
 }
 
 func (sv *callAttemptsService) UpdateAttemptByUser(id string, userID string, workspaceID string, data entities.CallAttemptModel) error {
-	data.ID = id
-	data.UserID = userID
+	// Ensure immutable fields are not modified
+	data.ID = ""
+	data.UserID = ""
+	data.WorkspaceID = ""
+	data.CreatedAt = time.Time{}
+	data.CallListItemID = ""
+
 	data.UpdatedAt = time.Now()
 	return sv.CallAttemptsRepository.UpdateByUser(id, workspaceID, userID, data)
 }
 
 func (sv *callAttemptsService) DeleteAttemptByUser(id string, userID string, workspaceID string) error {
 	return sv.CallAttemptsRepository.DeleteByUser(id, workspaceID, userID)
+}
+
+func (sv *callAttemptsService) GetAttemptsByFilterByUser(userID string, filter entities.CallAttemptFilter) (*[]entities.CallAttemptModel, error) {
+	if filter.WorkspaceID == "" {
+		return nil, errors.New("workspace_id must not be empty")
+	}
+	filter.UserID = userID
+	return sv.CallAttemptsRepository.FindByFilter(filter)
+}
+
+
+func (sv *callAttemptsService) UpdateMultipleAttemptsByUser(userID string, filter entities.CallAttemptFilter, data entities.CallAttemptModel) (int64, error) {
+	if filter.WorkspaceID == "" {
+		return 0, errors.New("workspace_id must not be empty")
+	}
+	filter.UserID = userID
+
+	// Ensure immutable fields are not modified in bulk update
+	data.ID = ""
+	data.UserID = ""
+	data.WorkspaceID = ""
+	data.CreatedAt = time.Time{}
+	data.CallListItemID = ""
+
+	data.UpdatedAt = time.Now()
+	return sv.CallAttemptsRepository.UpdateMultipleByUser(filter, data)
 }

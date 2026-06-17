@@ -32,6 +32,7 @@ func GatewayCallAttempts(gateway HTTPGateway, app *fiber.App) {
 	api.Post("/", gateway.CreateCallAttempt)
 	api.Get("/workspace/:workspace_id", gateway.GetCallAttemptsByWorkspace)
 	api.Get("/:id", gateway.GetCallAttemptByID)
+	api.Put("/", gateway.UpdateMultipleCallAttempts)
 	api.Put("/:id", gateway.UpdateCallAttempt)
 	api.Delete("/:id", gateway.DeleteCallAttempt)
 }
@@ -64,6 +65,12 @@ func GatewayWorkspaces(gateway HTTPGateway, app *fiber.App) {
 	api.Get("/:id", gateway.GetWorkspaceByID)
 	api.Put("/:id", gateway.UpdateWorkspace)
 	api.Delete("/:id", gateway.DeleteWorkspace)
+}
+
+func GatewayWebhooks(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/webhooks")
+
+	api.Post("/botnoi", gateway.Webhook)
 }
 
 func GatewayVoicebotMakeCall(gateway HTTPGateway, app *fiber.App) {

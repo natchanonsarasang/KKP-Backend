@@ -3,6 +3,8 @@ package gateways
 import (
 	"go-fiber-template/domain/entities"
 	"go-fiber-template/src/middlewares"
+	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -15,10 +17,40 @@ func (h *HTTPGateway) GetCallListItemsByWorkspace(ctx *fiber.Ctx) error {
 
 	workspaceID := ctx.Params("workspace_id")
 	if workspaceID == "" {
+		workspaceID = ctx.Query("workspace_id")
+	}
+	if workspaceID == "" {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "invalid workspace id"})
 	}
 
-	data, err := h.CallListItemService.GetCallListItemsByWorkspaceByUser(tokenData.UserID, workspaceID)
+	calledAtGteStr := ctx.Query("called_at_gte")
+	var calledAtGte time.Time
+	if calledAtGteStr != "" {
+		if t, err := time.Parse(time.RFC3339, calledAtGteStr); err == nil {
+			calledAtGte = t
+		} else if t, err := time.Parse("2006-01-02", calledAtGteStr); err == nil {
+			calledAtGte = t
+		}
+	}
+
+	var statusesIn []string
+	if inStr := ctx.Query("statuses_in"); inStr != "" {
+		statusesIn = strings.Split(inStr, ",")
+	}
+
+	var statusesNotIn []string
+	if notInStr := ctx.Query("statuses_not_in"); notInStr != "" {
+		statusesNotIn = strings.Split(notInStr, ",")
+	}
+
+	filter := entities.CallListItemFilter{
+		WorkspaceID:   workspaceID,
+		CalledAtGte:   calledAtGte,
+		StatusesIn:    statusesIn,
+		StatusesNotIn: statusesNotIn,
+	}
+
+	data, err := h.CallListItemService.GetCallListItemsByFilterByUser(tokenData.UserID, filter)
 	if err != nil {
 		return ctx.Status(fiber.StatusForbidden).JSON(entities.ResponseMessage{Message: err.Error()})
 	}

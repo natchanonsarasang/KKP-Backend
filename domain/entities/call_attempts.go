@@ -22,3 +22,11 @@ type CallAttemptModel struct {
 	CreatedAt       time.Time          `bson:"created_at,omitempty" json:"created_at"`
 	UpdatedAt       time.Time          `bson:"updated_at,omitempty" json:"updated_at"`
 }
+
+type CallAttemptFilter struct {
+	WorkspaceID    string `json:"workspace_id"`
+	UserID         string `json:"user_id"`
+	CallListItemID string `json:"call_list_item_id"`
+	Status         string `json:"status"`
+	Limit          int64  `json:"limit"`
+}

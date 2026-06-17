@@ -18,6 +18,7 @@ type ICallListItemsService interface {
 	GetCallListItemsByWorkspaceByUser(userID string, workspaceID string) (*[]entities.CallListItemModel, error)
 	GetCallListItemByID(id string) (*entities.CallListItemModel, error)
 	GetCallListItemByIDByUser(id string, userID string, workspaceID string) (*entities.CallListItemModel, error)
+	GetCallListItemsByFilterByUser(userID string, filter entities.CallListItemFilter) (*[]entities.CallListItemModel, error)
 	CreateCallListItem(data entities.CallListItemModel) error
 	CreateCallListItemByUser(userID string, data entities.CallListItemModel) error
 	// System Methods
@@ -81,12 +82,25 @@ func (sv *callListItemsService) DeleteCallListItem(id string) error {
 }
 
 func (sv *callListItemsService) UpdateCallListItemByUser(id string, userID string, workspaceID string, data entities.CallListItemModel) error {
-	data.ID = id
-	data.UserID = userID
+	// Ensure immutable fields are not modified
+	data.ID = ""
+	data.UserID = ""
+	data.WorkspaceID = ""
+	data.DebtorID = ""
+	data.CreatedAt = time.Time{}
+
 	data.UpdatedAt = time.Now()
 	return sv.CallListItemsRepository.UpdateByUser(id, workspaceID, userID, data)
 }
 
 func (sv *callListItemsService) DeleteCallListItemByUser(id string, userID string, workspaceID string) error {
 	return sv.CallListItemsRepository.DeleteByUser(id, workspaceID, userID)
+}
+
+func (sv *callListItemsService) GetCallListItemsByFilterByUser(userID string, filter entities.CallListItemFilter) (*[]entities.CallListItemModel, error) {
+	if filter.WorkspaceID == "" {
+		return nil, errors.New("workspace_id must not be empty")
+	}
+	filter.UserID = userID
+	return sv.CallListItemsRepository.FindByFilter(filter)
 }

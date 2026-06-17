@@ -18,7 +18,16 @@ func (h *HTTPGateway) GetCallAttemptsByWorkspace(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "invalid workspace id"})
 	}
 
-	data, err := h.CallAttemptService.GetAttemptsByWorkspaceByUser(tokenData.UserID, workspaceID)
+	limit := ctx.QueryInt("limit")
+
+	filter := entities.CallAttemptFilter{
+		WorkspaceID:    workspaceID,
+		CallListItemID: ctx.Query("call_list_item_id"),
+		Status:         ctx.Query("status"),
+		Limit:          int64(limit),
+	}
+
+	data, err := h.CallAttemptService.GetAttemptsByFilterByUser(tokenData.UserID, filter)
 	if err != nil {
 		return ctx.Status(fiber.StatusForbidden).JSON(entities.ResponseMessage{Message: err.Error()})
 	}
@@ -116,4 +125,38 @@ func (h *HTTPGateway) DeleteCallAttempt(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusForbidden).JSON(entities.ResponseMessage{Message: err.Error()})
 	}
 	return ctx.Status(fiber.StatusOK).JSON(entities.ResponseModel{Message: "success"})
+}
+
+
+
+func (h *HTTPGateway) UpdateMultipleCallAttempts(ctx *fiber.Ctx) error {
+	tokenData, err := middlewares.DecodeJWTToken(ctx)
+	if err != nil {
+		return err
+	}
+
+	workspaceID := ctx.Query("workspace_id")
+	if workspaceID == "" {
+		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "workspace_id query parameter is required"})
+	}
+
+	filter := entities.CallAttemptFilter{
+		WorkspaceID:    workspaceID,
+		CallListItemID: ctx.Query("call_list_item_id"),
+		Status:         ctx.Query("status"),
+	}
+
+	bodyData := entities.CallAttemptModel{}
+	if err := ctx.BodyParser(&bodyData); err != nil {
+		return ctx.Status(fiber.StatusUnprocessableEntity).JSON(entities.ResponseMessage{Message: "invalid json body"})
+	}
+
+	modifiedCount, err := h.CallAttemptService.UpdateMultipleAttemptsByUser(tokenData.UserID, filter, bodyData)
+	if err != nil {
+		return ctx.Status(fiber.StatusForbidden).JSON(entities.ResponseMessage{Message: err.Error()})
+	}
+	return ctx.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message":        "success",
+		"modified_count": modifiedCount,
+	})
 }

@@ -21,6 +21,7 @@ type IDebtorsRepository interface {
 	FindAllByWorkspace(workspaceID string, userID string) (*[]entities.DebtorModel, error)
 	FindByID(id string) (*entities.DebtorModel, error)
 	FindByIDByUser(id string, workspaceID string) (*entities.DebtorModel, error)
+	FindByPhoneNumber(phoneNumber string) (*entities.DebtorModel, error)
 	// System Methods
 	Update(id string, data entities.DebtorModel) error
 	Delete(id string) error
@@ -75,6 +76,20 @@ func (repo *debtorsRepository) FindByIDByUser(id string, workspaceID string) (*e
 	var debtor entities.DebtorModel
 	if err := repo.Collection.FindOne(repo.Context, filter).Decode(&debtor); err != nil {
 		fiberlog.Errorf("Debtors -> FindByIDByUser: %s \n", err)
+		return nil, err
+	}
+	return &debtor, nil
+}
+
+func (repo *debtorsRepository) FindByPhoneNumber(phoneNumber string) (*entities.DebtorModel, error) {
+	filter := bson.M{"phone_number": phoneNumber}
+	var debtor entities.DebtorModel
+	err := repo.Collection.FindOne(repo.Context, filter).Decode(&debtor)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		fiberlog.Errorf("Debtors -> FindByPhoneNumber: %s \n", err)
 		return nil, err
 	}
 	return &debtor, nil
