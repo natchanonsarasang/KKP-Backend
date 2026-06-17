@@ -9,6 +9,7 @@ import (
 	fiberlog "github.com/gofiber/fiber/v2/log"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type callAttemptsRepository struct {
@@ -22,7 +23,6 @@ type ICallAttemptsRepository interface {
 	FindByID(id string) (*entities.CallAttemptModel, error)
 	FindByIDByUser(id string, workspaceID string) (*entities.CallAttemptModel, error)
 	FindByFilter(filter entities.CallAttemptFilter) (*[]entities.CallAttemptModel, error)
-	FindOneByFilter(filter entities.CallAttemptFilter) (*entities.CallAttemptModel, error)
 	// System Methods
 	Update(id string, data entities.CallAttemptModel) error
 	Delete(id string) error
@@ -151,8 +151,13 @@ func (repo *callAttemptsRepository) FindByFilter(filter entities.CallAttemptFilt
 		queryFilter["status"] = filter.Status
 	}
 
+	findOptions := options.Find()
+	if filter.Limit > 0 {
+		findOptions.SetLimit(filter.Limit)
+	}
+
 	var attempts []entities.CallAttemptModel
-	cursor, err := repo.Collection.Find(repo.Context, queryFilter)
+	cursor, err := repo.Collection.Find(repo.Context, queryFilter, findOptions)
 	if err != nil {
 		fiberlog.Errorf("CallAttempts -> FindByFilter: %s \n", err)
 		return nil, err
@@ -165,30 +170,7 @@ func (repo *callAttemptsRepository) FindByFilter(filter entities.CallAttemptFilt
 	return &attempts, nil
 }
 
-func (repo *callAttemptsRepository) FindOneByFilter(filter entities.CallAttemptFilter) (*entities.CallAttemptModel, error) {
-	queryFilter := bson.M{
-		"workspace_id": filter.WorkspaceID,
-	}
-	if filter.UserID != "" {
-		queryFilter["user_id"] = filter.UserID
-	}
-	if filter.CallListItemID != "" {
-		queryFilter["call_list_item_id"] = filter.CallListItemID
-	}
-	if filter.Status != "" {
-		queryFilter["status"] = filter.Status
-	}
 
-	var attempt entities.CallAttemptModel
-	if err := repo.Collection.FindOne(repo.Context, queryFilter).Decode(&attempt); err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, nil
-		}
-		fiberlog.Errorf("CallAttempts -> FindOneByFilter: %s \n", err)
-		return nil, err
-	}
-	return &attempt, nil
-}
 
 func (repo *callAttemptsRepository) UpdateMultipleByUser(filter entities.CallAttemptFilter, data entities.CallAttemptModel) (int64, error) {
 	queryFilter := bson.M{

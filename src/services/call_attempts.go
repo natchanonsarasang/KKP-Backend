@@ -20,7 +20,6 @@ type ICallAttemptsService interface {
 	GetAttemptByID(id string) (*entities.CallAttemptModel, error)
 	GetAttemptByIDByUser(id string, userID string, workspaceID string) (*entities.CallAttemptModel, error)
 	GetAttemptsByFilterByUser(userID string, filter entities.CallAttemptFilter) (*[]entities.CallAttemptModel, error)
-	GetOneAttemptByFilterByUser(userID string, filter entities.CallAttemptFilter) (*entities.CallAttemptModel, error)
 	CreateAttempt(data entities.CallAttemptModel) error
 	CreateAttemptByUser(userID string, data entities.CallAttemptModel) error
 	// System Methods
@@ -109,13 +108,7 @@ func (sv *callAttemptsService) GetAttemptsByFilterByUser(userID string, filter e
 	return sv.CallAttemptsRepository.FindByFilter(filter)
 }
 
-func (sv *callAttemptsService) GetOneAttemptByFilterByUser(userID string, filter entities.CallAttemptFilter) (*entities.CallAttemptModel, error) {
-	if filter.WorkspaceID == "" {
-		return nil, errors.New("workspace_id must not be empty")
-	}
-	filter.UserID = userID
-	return sv.CallAttemptsRepository.FindOneByFilter(filter)
-}
+
 
 func (sv *callAttemptsService) UpdateMultipleAttemptsByUser(userID string, filter entities.CallAttemptFilter, data entities.CallAttemptModel) (int64, error) {
 	if filter.WorkspaceID == "" {

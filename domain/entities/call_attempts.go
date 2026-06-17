@@ -28,4 +28,5 @@ type CallAttemptFilter struct {
 	UserID         string `json:"user_id"`
 	CallListItemID string `json:"call_list_item_id"`
 	Status         string `json:"status"`
+	Limit          int64  `json:"limit"`
 }
