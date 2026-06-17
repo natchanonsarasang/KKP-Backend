@@ -5,7 +5,6 @@ import (
 	"go-fiber-template/src/middlewares"
 
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func (h *HTTPGateway) GetCallAttemptsByWorkspace(ctx *fiber.Ctx) error {
@@ -14,9 +13,8 @@ func (h *HTTPGateway) GetCallAttemptsByWorkspace(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	workspaceIDStr := ctx.Params("workspace_id")
-	workspaceID, err := primitive.ObjectIDFromHex(workspaceIDStr)
-	if err != nil {
+	workspaceID := ctx.Params("workspace_id")
+	if workspaceID == "" {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "invalid workspace id"})
 	}
 
@@ -38,7 +36,7 @@ func (h *HTTPGateway) CreateCallAttempt(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusUnprocessableEntity).JSON(entities.ResponseMessage{Message: "invalid json body"})
 	}
 
-	if bodyData.WorkspaceID.IsZero() {
+	if bodyData.WorkspaceID == "" {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "workspace_id is required"})
 	}
 
@@ -54,20 +52,14 @@ func (h *HTTPGateway) GetCallAttemptByID(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	idStr := ctx.Params("id")
-	id, err := primitive.ObjectIDFromHex(idStr)
-	if err != nil {
+	id := ctx.Params("id")
+	if id == "" {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "invalid id"})
 	}
 
-	workspaceIDStr := ctx.Query("workspace_id")
-	if workspaceIDStr == "" {
+	workspaceID := ctx.Query("workspace_id")
+	if workspaceID == "" {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "workspace_id query parameter is required"})
-	}
-
-	workspaceID, err := primitive.ObjectIDFromHex(workspaceIDStr)
-	if err != nil {
-		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "invalid workspace id"})
 	}
 
 	data, err := h.CallAttemptService.GetAttemptByIDByUser(id, tokenData.UserID, workspaceID)
@@ -83,9 +75,8 @@ func (h *HTTPGateway) UpdateCallAttempt(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	idStr := ctx.Params("id")
-	id, err := primitive.ObjectIDFromHex(idStr)
-	if err != nil {
+	id := ctx.Params("id")
+	if id == "" {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "invalid id"})
 	}
 
@@ -94,11 +85,12 @@ func (h *HTTPGateway) UpdateCallAttempt(ctx *fiber.Ctx) error {
 		return ctx.Status(fiber.StatusUnprocessableEntity).JSON(entities.ResponseMessage{Message: "invalid json body"})
 	}
 
-	if bodyData.WorkspaceID.IsZero() {
-		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "workspace_id is required"})
+	workspaceID := ctx.Query("workspace_id")
+	if workspaceID == "" {
+		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "workspace_id query parameter is required"})
 	}
 
-	if err := h.CallAttemptService.UpdateAttemptByUser(id, tokenData.UserID, bodyData.WorkspaceID, bodyData); err != nil {
+	if err := h.CallAttemptService.UpdateAttemptByUser(id, tokenData.UserID, workspaceID, bodyData); err != nil {
 		return ctx.Status(fiber.StatusForbidden).JSON(entities.ResponseMessage{Message: err.Error()})
 	}
 	return ctx.Status(fiber.StatusOK).JSON(entities.ResponseModel{Message: "success"})
@@ -110,20 +102,14 @@ func (h *HTTPGateway) DeleteCallAttempt(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	idStr := ctx.Params("id")
-	id, err := primitive.ObjectIDFromHex(idStr)
-	if err != nil {
+	id := ctx.Params("id")
+	if id == "" {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "invalid id"})
 	}
 
-	workspaceIDStr := ctx.Query("workspace_id")
-	if workspaceIDStr == "" {
+	workspaceID := ctx.Query("workspace_id")
+	if workspaceID == "" {
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "workspace_id query parameter is required"})
-	}
-
-	workspaceID, err := primitive.ObjectIDFromHex(workspaceIDStr)
-	if err != nil {
-		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "invalid workspace id"})
 	}
 
 	if err := h.CallAttemptService.DeleteAttemptByUser(id, tokenData.UserID, workspaceID); err != nil {

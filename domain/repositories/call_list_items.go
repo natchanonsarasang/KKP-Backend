@@ -9,7 +9,6 @@ import (
 	fiberlog "github.com/gofiber/fiber/v2/log"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type callListItemsRepository struct {
@@ -19,15 +18,15 @@ type callListItemsRepository struct {
 
 type ICallListItemsRepository interface {
 	Insert(data entities.CallListItemModel) error
-	FindAllByWorkspace(workspaceID primitive.ObjectID) (*[]entities.CallListItemModel, error)
-	FindByID(id primitive.ObjectID) (*entities.CallListItemModel, error)
-	FindByIDByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) (*entities.CallListItemModel, error)
+	FindAllByWorkspace(workspaceID string, userID string) (*[]entities.CallListItemModel, error)
+	FindByID(id string) (*entities.CallListItemModel, error)
+	FindByIDByUser(id string, workspaceID string) (*entities.CallListItemModel, error)
 	// System Methods
-	Update(id primitive.ObjectID, data entities.CallListItemModel) error
-	Delete(id primitive.ObjectID) error
+	Update(id string, data entities.CallListItemModel) error
+	Delete(id string) error
 	// ByUser Methods
-	UpdateByUser(id primitive.ObjectID, workspaceID primitive.ObjectID, data entities.CallListItemModel) error
-	DeleteByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) error
+	UpdateByUser(id string, workspaceID string, userID string, data entities.CallListItemModel) error
+	DeleteByUser(id string, workspaceID string, userID string) error
 }
 
 func NewCallListItemsRepository(db *MongoDB) ICallListItemsRepository {
@@ -45,8 +44,8 @@ func (repo *callListItemsRepository) Insert(data entities.CallListItemModel) err
 	return nil
 }
 
-func (repo *callListItemsRepository) FindAllByWorkspace(workspaceID primitive.ObjectID) (*[]entities.CallListItemModel, error) {
-	filter := bson.M{"workspace_id": workspaceID}
+func (repo *callListItemsRepository) FindAllByWorkspace(workspaceID string, userID string) (*[]entities.CallListItemModel, error) {
+	filter := bson.M{"workspace_id": workspaceID, "user_id": userID}
 	var items []entities.CallListItemModel
 	cursor, err := repo.Collection.Find(repo.Context, filter)
 	if err != nil {
@@ -61,8 +60,8 @@ func (repo *callListItemsRepository) FindAllByWorkspace(workspaceID primitive.Ob
 	return &items, nil
 }
 
-func (repo *callListItemsRepository) FindByID(id primitive.ObjectID) (*entities.CallListItemModel, error) {
-	filter := bson.M{"_id": id}
+func (repo *callListItemsRepository) FindByID(id string) (*entities.CallListItemModel, error) {
+	filter := bson.M{"id": id}
 	var item entities.CallListItemModel
 	if err := repo.Collection.FindOne(repo.Context, filter).Decode(&item); err != nil {
 		fiberlog.Errorf("CallListItems -> FindByID: %s \n", err)
@@ -71,8 +70,8 @@ func (repo *callListItemsRepository) FindByID(id primitive.ObjectID) (*entities.
 	return &item, nil
 }
 
-func (repo *callListItemsRepository) FindByIDByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) (*entities.CallListItemModel, error) {
-	filter := bson.M{"_id": id, "workspace_id": workspaceID}
+func (repo *callListItemsRepository) FindByIDByUser(id string, workspaceID string) (*entities.CallListItemModel, error) {
+	filter := bson.M{"id": id, "workspace_id": workspaceID}
 	var item entities.CallListItemModel
 	if err := repo.Collection.FindOne(repo.Context, filter).Decode(&item); err != nil {
 		fiberlog.Errorf("CallListItems -> FindByIDByUser: %s \n", err)
@@ -81,8 +80,8 @@ func (repo *callListItemsRepository) FindByIDByUser(id primitive.ObjectID, works
 	return &item, nil
 }
 
-func (repo *callListItemsRepository) Update(id primitive.ObjectID, data entities.CallListItemModel) error {
-	filter := bson.M{"_id": id}
+func (repo *callListItemsRepository) Update(id string, data entities.CallListItemModel) error {
+	filter := bson.M{"id": id}
 	update := bson.M{"$set": data}
 	result, err := repo.Collection.UpdateOne(repo.Context, filter, update)
 	if err != nil {
@@ -95,8 +94,8 @@ func (repo *callListItemsRepository) Update(id primitive.ObjectID, data entities
 	return nil
 }
 
-func (repo *callListItemsRepository) Delete(id primitive.ObjectID) error {
-	filter := bson.M{"_id": id}
+func (repo *callListItemsRepository) Delete(id string) error {
+	filter := bson.M{"id": id}
 	result, err := repo.Collection.DeleteOne(repo.Context, filter)
 	if err != nil {
 		fiberlog.Errorf("CallListItems -> Delete: %s \n", err)
@@ -108,8 +107,8 @@ func (repo *callListItemsRepository) Delete(id primitive.ObjectID) error {
 	return nil
 }
 
-func (repo *callListItemsRepository) UpdateByUser(id primitive.ObjectID, workspaceID primitive.ObjectID, data entities.CallListItemModel) error {
-	filter := bson.M{"_id": id, "workspace_id": workspaceID}
+func (repo *callListItemsRepository) UpdateByUser(id string, workspaceID string, userID string, data entities.CallListItemModel) error {
+	filter := bson.M{"id": id, "workspace_id": workspaceID, "user_id": userID}
 	update := bson.M{"$set": data}
 	result, err := repo.Collection.UpdateOne(repo.Context, filter, update)
 	if err != nil {
@@ -122,8 +121,8 @@ func (repo *callListItemsRepository) UpdateByUser(id primitive.ObjectID, workspa
 	return nil
 }
 
-func (repo *callListItemsRepository) DeleteByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) error {
-	filter := bson.M{"_id": id, "workspace_id": workspaceID}
+func (repo *callListItemsRepository) DeleteByUser(id string, workspaceID string, userID string) error {
+	filter := bson.M{"id": id, "workspace_id": workspaceID, "user_id": userID}
 	result, err := repo.Collection.DeleteOne(repo.Context, filter)
 	if err != nil {
 		fiberlog.Errorf("CallListItems -> DeleteByUser: %s \n", err)

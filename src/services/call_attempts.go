@@ -6,60 +6,57 @@ import (
 	"go-fiber-template/domain/repositories"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"github.com/google/uuid"
 )
 
 type callAttemptsService struct {
 	CallAttemptsRepository  repositories.ICallAttemptsRepository
 	CallListItemsRepository repositories.ICallListItemsRepository
-	UsersService            IUsersService
 }
 
 type ICallAttemptsService interface {
-	GetAttemptsByWorkspace(workspaceID primitive.ObjectID) (*[]entities.CallAttemptModel, error)
-	GetAttemptsByWorkspaceByUser(userID string, workspaceID primitive.ObjectID) (*[]entities.CallAttemptModel, error)
-	GetAttemptByID(id primitive.ObjectID) (*entities.CallAttemptModel, error)
-	GetAttemptByIDByUser(id primitive.ObjectID, userID string, workspaceID primitive.ObjectID) (*entities.CallAttemptModel, error)
+	GetAttemptsByWorkspace(workspaceID string) (*[]entities.CallAttemptModel, error)
+	GetAttemptsByWorkspaceByUser(userID string, workspaceID string) (*[]entities.CallAttemptModel, error)
+	GetAttemptByID(id string) (*entities.CallAttemptModel, error)
+	GetAttemptByIDByUser(id string, userID string, workspaceID string) (*entities.CallAttemptModel, error)
 	CreateAttempt(data entities.CallAttemptModel) error
 	CreateAttemptByUser(userID string, data entities.CallAttemptModel) error
 	// System Methods
-	UpdateAttempt(id primitive.ObjectID, data entities.CallAttemptModel) error
-	DeleteAttempt(id primitive.ObjectID) error
+	UpdateAttempt(id string, data entities.CallAttemptModel) error
+	DeleteAttempt(id string) error
 	// ByUser Methods
-	UpdateAttemptByUser(id primitive.ObjectID, userID string, workspaceID primitive.ObjectID, data entities.CallAttemptModel) error
-	DeleteAttemptByUser(id primitive.ObjectID, userID string, workspaceID primitive.ObjectID) error
+	UpdateAttemptByUser(id string, userID string, workspaceID string, data entities.CallAttemptModel) error
+	DeleteAttemptByUser(id string, userID string, workspaceID string) error
 }
 
-func NewCallAttemptsService(repo repositories.ICallAttemptsRepository, itemRepo repositories.ICallListItemsRepository, usersService IUsersService) ICallAttemptsService {
+func NewCallAttemptsService(repo repositories.ICallAttemptsRepository, itemRepo repositories.ICallListItemsRepository) ICallAttemptsService {
 	return &callAttemptsService{
 		CallAttemptsRepository:  repo,
 		CallListItemsRepository: itemRepo,
-		UsersService:            usersService,
 	}
 }
 
-func (sv *callAttemptsService) GetAttemptsByWorkspace(workspaceID primitive.ObjectID) (*[]entities.CallAttemptModel, error) {
-	return sv.CallAttemptsRepository.FindAllByWorkspace(workspaceID)
+func (sv *callAttemptsService) GetAttemptsByWorkspace(workspaceID string) (*[]entities.CallAttemptModel, error) {
+	return sv.CallAttemptsRepository.FindAllByWorkspace(workspaceID, "")
 }
 
-func (sv *callAttemptsService) GetAttemptsByWorkspaceByUser(userID string, workspaceID primitive.ObjectID) (*[]entities.CallAttemptModel, error) {
-	isMember, err := sv.UsersService.VerifyUserInWorkspace(userID, workspaceID)
-	if err != nil || !isMember {
-		return nil, errors.New("unauthorized access to this workspace")
-	}
-	return sv.CallAttemptsRepository.FindAllByWorkspace(workspaceID)
+func (sv *callAttemptsService) GetAttemptsByWorkspaceByUser(userID string, workspaceID string) (*[]entities.CallAttemptModel, error) {
+	return sv.CallAttemptsRepository.FindAllByWorkspace(workspaceID, userID)
 }
 
-func (sv *callAttemptsService) GetAttemptByID(id primitive.ObjectID) (*entities.CallAttemptModel, error) {
+func (sv *callAttemptsService) GetAttemptByID(id string) (*entities.CallAttemptModel, error) {
 	return sv.CallAttemptsRepository.FindByID(id)
 }
 
-func (sv *callAttemptsService) GetAttemptByIDByUser(id primitive.ObjectID, userID string, workspaceID primitive.ObjectID) (*entities.CallAttemptModel, error) {
-	isMember, err := sv.UsersService.VerifyUserInWorkspace(userID, workspaceID)
-	if err != nil || !isMember {
-		return nil, errors.New("unauthorized access to this workspace")
+func (sv *callAttemptsService) GetAttemptByIDByUser(id string, userID string, workspaceID string) (*entities.CallAttemptModel, error) {
+	attempt, err := sv.CallAttemptsRepository.FindByIDByUser(id, workspaceID)
+	if err != nil {
+		return nil, err
 	}
-	return sv.CallAttemptsRepository.FindByIDByUser(id, workspaceID)
+	if attempt.UserID != userID {
+		return nil, errors.New("unauthorized: you do not own this call attempt")
+	}
+	return attempt, nil
 }
 
 func (sv *callAttemptsService) CreateAttempt(data entities.CallAttemptModel) error {
@@ -68,43 +65,35 @@ func (sv *callAttemptsService) CreateAttempt(data entities.CallAttemptModel) err
 		return errors.New("call list item not found")
 	}
 
-	data.CreatedAt = time.Now().Add(7 * time.Hour)
-	data.UpdatedAt = time.Now().Add(7 * time.Hour)
+	if data.ID == "" {
+		data.ID = uuid.NewString()
+	}
+	data.CreatedAt = time.Now()
+	data.UpdatedAt = time.Now()
 	return sv.CallAttemptsRepository.Insert(data)
 }
 
 func (sv *callAttemptsService) CreateAttemptByUser(userID string, data entities.CallAttemptModel) error {
-	isMember, err := sv.UsersService.VerifyUserInWorkspace(userID, data.WorkspaceID)
-	if err != nil || !isMember {
-		return errors.New("unauthorized access to this workspace")
-	}
+	data.UserID = userID
 	return sv.CreateAttempt(data)
 }
 
-func (sv *callAttemptsService) UpdateAttempt(id primitive.ObjectID, data entities.CallAttemptModel) error {
-	data.UpdatedAt = time.Now().Add(7 * time.Hour)
+func (sv *callAttemptsService) UpdateAttempt(id string, data entities.CallAttemptModel) error {
+	data.UpdatedAt = time.Now()
 	return sv.CallAttemptsRepository.Update(id, data)
 }
 
-func (sv *callAttemptsService) DeleteAttempt(id primitive.ObjectID) error {
+func (sv *callAttemptsService) DeleteAttempt(id string) error {
 	return sv.CallAttemptsRepository.Delete(id)
 }
 
-func (sv *callAttemptsService) UpdateAttemptByUser(id primitive.ObjectID, userID string, workspaceID primitive.ObjectID, data entities.CallAttemptModel) error {
-	isMember, err := sv.UsersService.VerifyUserInWorkspace(userID, workspaceID)
-	if err != nil || !isMember {
-		return errors.New("unauthorized access to this workspace")
-	}
-
-	data.UpdatedAt = time.Now().Add(7 * time.Hour)
-	return sv.CallAttemptsRepository.UpdateByUser(id, workspaceID, data)
+func (sv *callAttemptsService) UpdateAttemptByUser(id string, userID string, workspaceID string, data entities.CallAttemptModel) error {
+	data.ID = id
+	data.UserID = userID
+	data.UpdatedAt = time.Now()
+	return sv.CallAttemptsRepository.UpdateByUser(id, workspaceID, userID, data)
 }
 
-func (sv *callAttemptsService) DeleteAttemptByUser(id primitive.ObjectID, userID string, workspaceID primitive.ObjectID) error {
-	isMember, err := sv.UsersService.VerifyUserInWorkspace(userID, workspaceID)
-	if err != nil || !isMember {
-		return errors.New("unauthorized access to this workspace")
-	}
-
-	return sv.CallAttemptsRepository.DeleteByUser(id, workspaceID)
+func (sv *callAttemptsService) DeleteAttemptByUser(id string, userID string, workspaceID string) error {
+	return sv.CallAttemptsRepository.DeleteByUser(id, workspaceID, userID)
 }

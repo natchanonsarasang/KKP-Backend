@@ -196,8 +196,9 @@ func (sv *callSessionsService) UpdateCallSessionByUser(callerUserID string, id s
 	data.ID = id
 	data.UserID = callerUserID
 	data.WorkspaceID = existing.WorkspaceID
+	data.UpdatedAt = time.Now()
 
-	return sv.UpdateCallSession(id, data)
+	return sv.CallSessionsRepository.UpdateCallSessionByUser(id, callerUserID, data)
 }
 
 // DeleteCallSessionByUser (User access context)
@@ -206,17 +207,5 @@ func (sv *callSessionsService) DeleteCallSessionByUser(callerUserID string, id s
 		return errors.New("unauthorized: callerUserID must not be empty")
 	}
 
-	existing, err := sv.CallSessionsRepository.FindByID(id)
-	if err != nil {
-		return err
-	}
-	if existing == nil {
-		return errors.New("session not found")
-	}
-
-	if existing.UserID != callerUserID {
-		return errors.New("unauthorized: user does not own this resource")
-	}
-
-	return sv.DeleteCallSession(id)
+	return sv.CallSessionsRepository.DeleteCallSessionByUser(id, callerUserID)
 }

@@ -27,12 +27,14 @@ type ICallSessionsRepository interface {
 	FindByFilter(filter entities.CallSessionFilter) (*[]entities.CallSessionDataModel, error)
 	UpdateCallSession(id string, data entities.CallSessionDataModel) error
 	DeleteCallSession(id string) error
+	UpdateCallSessionByUser(id string, userID string, data entities.CallSessionDataModel) error
+	DeleteCallSessionByUser(id string, userID string) error
 }
 
 func NewCallSessionsRepository(db *MongoDB) ICallSessionsRepository {
 	return &callSessionsRepository{
 		Context:    db.Context,
-		Collection: db.MongoDB.Database(os.Getenv("DATABASE_NAME")).Collection("call_sessions"),
+		Collection: db.MongoDB.Database(os.Getenv("MONGODB_NAME")).Collection("call_sessions"),
 	}
 }
 
@@ -186,4 +188,34 @@ func (repo *callSessionsRepository) FindByFilter(filter entities.CallSessionFilt
 	}
 
 	return &sessions, nil
+}
+
+func (repo *callSessionsRepository) UpdateCallSessionByUser(id string, userID string, data entities.CallSessionDataModel) error {
+	filter := bson.M{"id": id, "user_id": userID}
+	if data.UpdatedAt.IsZero() {
+		data.UpdatedAt = time.Now().UTC()
+	}
+	update := bson.M{"$set": data}
+	result, err := repo.Collection.UpdateOne(repo.Context, filter, update)
+	if err != nil {
+		fiberlog.Errorf("CallSessions -> UpdateCallSessionByUser: %s \n", err)
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+func (repo *callSessionsRepository) DeleteCallSessionByUser(id string, userID string) error {
+	filter := bson.M{"id": id, "user_id": userID}
+	result, err := repo.Collection.DeleteOne(repo.Context, filter)
+	if err != nil {
+		fiberlog.Errorf("CallSessions -> DeleteCallSessionByUser: %s \n", err)
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }

@@ -2,14 +2,13 @@ package entities
 
 import (
 	"time"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type DebtorModel struct {
-	ID                 primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	WorkspaceID        primitive.ObjectID `bson:"workspace_id,omitempty" json:"workspace_id"`
-	PhoneNumber        string             `bson:"phone_number,omitempty" json:"phone_number"`
+	ID                 string    `bson:"id,omitempty" json:"id"`
+	UserID             string    `bson:"user_id,omitempty" json:"user_id"`
+	WorkspaceID        string    `bson:"workspace_id,omitempty" json:"workspace_id"`
+	PhoneNumber        string    `bson:"phone_number,omitempty" json:"phone_number"`
 	Name               string             `bson:"name,omitempty" json:"name"`
 	TotalDebt          float64            `bson:"total_debt,omitempty" json:"total_debt"`
 	Status             string             `bson:"status,omitempty" json:"status"` // active/paid/defaulted/negotiating/pending

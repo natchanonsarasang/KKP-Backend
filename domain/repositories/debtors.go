@@ -9,7 +9,6 @@ import (
 	fiberlog "github.com/gofiber/fiber/v2/log"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type debtorsRepository struct {
@@ -19,15 +18,15 @@ type debtorsRepository struct {
 
 type IDebtorsRepository interface {
 	Insert(data entities.DebtorModel) error
-	FindAllByWorkspace(workspaceID primitive.ObjectID) (*[]entities.DebtorModel, error)
-	FindByID(id primitive.ObjectID) (*entities.DebtorModel, error)
-	FindByIDByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) (*entities.DebtorModel, error)
+	FindAllByWorkspace(workspaceID string, userID string) (*[]entities.DebtorModel, error)
+	FindByID(id string) (*entities.DebtorModel, error)
+	FindByIDByUser(id string, workspaceID string) (*entities.DebtorModel, error)
 	// System Methods
-	Update(id primitive.ObjectID, data entities.DebtorModel) error
-	Delete(id primitive.ObjectID) error
-	// ByUser Methods (Protected by WorkspaceID)
-	UpdateByUser(id primitive.ObjectID, workspaceID primitive.ObjectID, data entities.DebtorModel) error
-	DeleteByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) error
+	Update(id string, data entities.DebtorModel) error
+	Delete(id string) error
+	// ByUser Methods
+	UpdateByUser(id string, workspaceID string, userID string, data entities.DebtorModel) error
+	DeleteByUser(id string, workspaceID string, userID string) error
 }
 
 func NewDebtorsRepository(db *MongoDB) IDebtorsRepository {
@@ -45,8 +44,8 @@ func (repo *debtorsRepository) Insert(data entities.DebtorModel) error {
 	return nil
 }
 
-func (repo *debtorsRepository) FindAllByWorkspace(workspaceID primitive.ObjectID) (*[]entities.DebtorModel, error) {
-	filter := bson.M{"workspace_id": workspaceID}
+func (repo *debtorsRepository) FindAllByWorkspace(workspaceID string, userID string) (*[]entities.DebtorModel, error) {
+	filter := bson.M{"workspace_id": workspaceID, "user_id": userID}
 	var debtors []entities.DebtorModel
 	cursor, err := repo.Collection.Find(repo.Context, filter)
 	if err != nil {
@@ -61,8 +60,8 @@ func (repo *debtorsRepository) FindAllByWorkspace(workspaceID primitive.ObjectID
 	return &debtors, nil
 }
 
-func (repo *debtorsRepository) FindByID(id primitive.ObjectID) (*entities.DebtorModel, error) {
-	filter := bson.M{"_id": id}
+func (repo *debtorsRepository) FindByID(id string) (*entities.DebtorModel, error) {
+	filter := bson.M{"id": id}
 	var debtor entities.DebtorModel
 	if err := repo.Collection.FindOne(repo.Context, filter).Decode(&debtor); err != nil {
 		fiberlog.Errorf("Debtors -> FindByID: %s \n", err)
@@ -71,8 +70,8 @@ func (repo *debtorsRepository) FindByID(id primitive.ObjectID) (*entities.Debtor
 	return &debtor, nil
 }
 
-func (repo *debtorsRepository) FindByIDByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) (*entities.DebtorModel, error) {
-	filter := bson.M{"_id": id, "workspace_id": workspaceID}
+func (repo *debtorsRepository) FindByIDByUser(id string, workspaceID string) (*entities.DebtorModel, error) {
+	filter := bson.M{"id": id, "workspace_id": workspaceID}
 	var debtor entities.DebtorModel
 	if err := repo.Collection.FindOne(repo.Context, filter).Decode(&debtor); err != nil {
 		fiberlog.Errorf("Debtors -> FindByIDByUser: %s \n", err)
@@ -81,8 +80,8 @@ func (repo *debtorsRepository) FindByIDByUser(id primitive.ObjectID, workspaceID
 	return &debtor, nil
 }
 
-func (repo *debtorsRepository) Update(id primitive.ObjectID, data entities.DebtorModel) error {
-	filter := bson.M{"_id": id}
+func (repo *debtorsRepository) Update(id string, data entities.DebtorModel) error {
+	filter := bson.M{"id": id}
 	update := bson.M{"$set": data}
 	result, err := repo.Collection.UpdateOne(repo.Context, filter, update)
 	if err != nil {
@@ -95,8 +94,8 @@ func (repo *debtorsRepository) Update(id primitive.ObjectID, data entities.Debto
 	return nil
 }
 
-func (repo *debtorsRepository) Delete(id primitive.ObjectID) error {
-	filter := bson.M{"_id": id}
+func (repo *debtorsRepository) Delete(id string) error {
+	filter := bson.M{"id": id}
 	result, err := repo.Collection.DeleteOne(repo.Context, filter)
 	if err != nil {
 		fiberlog.Errorf("Debtors -> Delete: %s \n", err)
@@ -108,8 +107,8 @@ func (repo *debtorsRepository) Delete(id primitive.ObjectID) error {
 	return nil
 }
 
-func (repo *debtorsRepository) UpdateByUser(id primitive.ObjectID, workspaceID primitive.ObjectID, data entities.DebtorModel) error {
-	filter := bson.M{"_id": id, "workspace_id": workspaceID}
+func (repo *debtorsRepository) UpdateByUser(id string, workspaceID string, userID string, data entities.DebtorModel) error {
+	filter := bson.M{"id": id, "workspace_id": workspaceID, "user_id": userID}
 	update := bson.M{"$set": data}
 	result, err := repo.Collection.UpdateOne(repo.Context, filter, update)
 	if err != nil {
@@ -122,8 +121,8 @@ func (repo *debtorsRepository) UpdateByUser(id primitive.ObjectID, workspaceID p
 	return nil
 }
 
-func (repo *debtorsRepository) DeleteByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) error {
-	filter := bson.M{"_id": id, "workspace_id": workspaceID}
+func (repo *debtorsRepository) DeleteByUser(id string, workspaceID string, userID string) error {
+	filter := bson.M{"id": id, "workspace_id": workspaceID, "user_id": userID}
 	result, err := repo.Collection.DeleteOne(repo.Context, filter)
 	if err != nil {
 		fiberlog.Errorf("Debtors -> DeleteByUser: %s \n", err)

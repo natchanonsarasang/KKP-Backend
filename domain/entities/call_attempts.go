@@ -2,15 +2,14 @@ package entities
 
 import (
 	"time"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type CallAttemptModel struct {
-	ID              primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	CallListItemID  primitive.ObjectID `bson:"call_list_item_id,omitempty" json:"call_list_item_id"`
-	CallRecordID    primitive.ObjectID `bson:"call_record_id,omitempty" json:"call_record_id"`
-	WorkspaceID     primitive.ObjectID `bson:"workspace_id,omitempty" json:"workspace_id"`
+	ID              string             `bson:"id,omitempty" json:"id"`
+	UserID          string             `bson:"user_id,omitempty" json:"user_id"`
+	CallListItemID  string             `bson:"call_list_item_id,omitempty" json:"call_list_item_id"`
+	CallRecordID    string             `bson:"call_record_id,omitempty" json:"call_record_id"`
+	WorkspaceID     string             `bson:"workspace_id,omitempty" json:"workspace_id"`
 	AttemptNumber   int                `bson:"attempt_number,omitempty" json:"attempt_number"`
 	Status          string             `bson:"status,omitempty" json:"status"` // calling/finished
 	CallOutcome     string             `bson:"call_outcome,omitempty" json:"call_outcome"`

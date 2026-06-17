@@ -169,7 +169,7 @@ func (sv *callRecordsService) UpdateCallRecordByUser(id string, userID string, d
 		return err
 	}
 
-	return sv.Repo.UpdateCallRecord(id, data)
+	return sv.Repo.UpdateCallRecordByUser(id, userID, data)
 }
 
 func (sv *callRecordsService) DeleteCallRecordByUser(id string, userID string) error {
@@ -180,19 +180,7 @@ func (sv *callRecordsService) DeleteCallRecordByUser(id string, userID string) e
 		return errors.New("unauthorized: missing user id")
 	}
 
-	// Fetch existing record to verify ownership
-	existing, err := sv.Repo.FindByID(id)
-	if err != nil {
-		return err
-	}
-	if existing == nil {
-		return errors.New("call record not found")
-	}
-	if existing.UserID != userID {
-		return errors.New("unauthorized: you do not own this call record")
-	}
-
-	return sv.Repo.DeleteCallRecord(id)
+	return sv.Repo.DeleteCallRecordByUser(id, userID)
 }
 
 // validateCallRecord runs all business logic validations on a CallRecordDataModel
