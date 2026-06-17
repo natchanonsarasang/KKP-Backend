@@ -13,6 +13,7 @@ type HTTPGateway struct {
 	CallAttemptService  service.ICallAttemptsService
 	CallSessionService  service.ICallSessionsService
 	WorkspacesService   service.IWorkspacesService
+	WebhookService      service.IWebhookService
 }
 
 func NewHTTPGateway(
@@ -23,6 +24,7 @@ func NewHTTPGateway(
 	items service.ICallListItemsService,
 	attempts service.ICallAttemptsService,
 	sessions service.ICallSessionsService,
+	webhook service.IWebhookService,
 ) {
 	gateway := &HTTPGateway{
 		WorkspacesService:   workspaces,
@@ -31,6 +33,7 @@ func NewHTTPGateway(
 		CallListItemService: items,
 		CallAttemptService:  attempts,
 		CallSessionService:  sessions,
+		WebhookService:      webhook,
 	}
 
 	GatewayWorkspaces(*gateway, app)
@@ -39,4 +42,5 @@ func NewHTTPGateway(
 	GatewayCallListItems(*gateway, app)
 	GatewayCallAttempts(*gateway, app)
 	GatewayCallSessions(*gateway, app)
+	GatewayWebhooks(*gateway, app)
 }

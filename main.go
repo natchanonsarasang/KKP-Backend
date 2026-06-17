@@ -51,8 +51,9 @@ func main() {
 	sv4 := sv.NewCallSessionsService(callSessionRepo)
 	callRecordsSv := sv.NewCallRecordsService(callRecordsRepo)
 	sv6 := sv.NewWorkspacesService(workspacesRepo)
+	webhookSv := sv.NewWebhookService(callRecordsSv, sv1, sv2, sv3, sv4)
 
-	gw.NewHTTPGateway(app, sv6, callRecordsSv, sv1, sv2, sv3, sv4)
+	gw.NewHTTPGateway(app, sv6, callRecordsSv, sv1, sv2, sv3, sv4, webhookSv)
 
 	PORT := os.Getenv("PORT")
 

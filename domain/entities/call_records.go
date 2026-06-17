@@ -22,6 +22,7 @@ const (
 	StatusRejected   CallStatus = "rejected"
 	StatusVoicemail  CallStatus = "voicemail"
 	StatusCalling    CallStatus = "calling"
+	StatusNotConvenient CallStatus = "not_convenient"
 )
 
 // CallRecordDataModel represents a call record in the database.

@@ -18,6 +18,7 @@ type IDebtorsService interface {
 	GetDebtorsByWorkspaceByUser(userID string, workspaceID string) (*[]entities.DebtorModel, error)
 	GetDebtorByID(id string) (*entities.DebtorModel, error)
 	GetDebtorByIDByUser(id string, userID string, workspaceID string) (*entities.DebtorModel, error)
+	GetDebtorByPhoneNumber(phoneNumber string) (*entities.DebtorModel, error)
 	CreateDebtor(data entities.DebtorModel) error
 	CreateDebtorByUser(userID string, data entities.DebtorModel) error
 	// System Methods
@@ -58,6 +59,10 @@ func (sv *debtorsService) GetDebtorByIDByUser(id string, userID string, workspac
 		return nil, errors.New("unauthorized: you do not own this debtor record")
 	}
 	return debtor, nil
+}
+
+func (sv *debtorsService) GetDebtorByPhoneNumber(phoneNumber string) (*entities.DebtorModel, error) {
+	return sv.DebtorsRepository.FindByPhoneNumber(phoneNumber)
 }
 
 func (sv *debtorsService) CreateDebtor(data entities.DebtorModel) error {
