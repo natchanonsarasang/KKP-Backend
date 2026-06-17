@@ -9,6 +9,7 @@ import (
 	sv "go-fiber-template/src/services"
 	"log"
 	"os"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -17,13 +18,18 @@ import (
 )
 
 func main() {
-
 	// // // remove this before deploy ###################
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		log.Println("Note: .env file not found, using system environment variables")
 	}
 	// /// ############################################
+
+	// Set Timezone to Asia/Bangkok
+	loc, err := time.LoadLocation("Asia/Bangkok")
+	if err == nil {
+		time.Local = loc
+	}
 
 	app := fiber.New(configuration.NewFiberConfiguration())
 	middlewares.Logger(app)
@@ -32,25 +38,21 @@ func main() {
 
 	mongodb := ds.NewMongoDB(10)
 
-	userRepo := repo.NewUsersRepository(mongodb)
 	debtorRepo := repo.NewDebtorsRepository(mongodb)
 	callListItemRepo := repo.NewCallListItemsRepository(mongodb)
 	callAttemptRepo := repo.NewCallAttemptsRepository(mongodb)
 	callSessionRepo := repo.NewCallSessionsRepository(mongodb)
 	callRecordsRepo := repo.NewCallRecordsRepository(mongodb)
-	workspaceMembersRepo := repo.NewWorkspaceMembersRepository(mongodb)
 	workspacesRepo := repo.NewWorkspacesRepository(mongodb)
 
-	sv0 := sv.NewUsersService(userRepo)
-	sv1 := sv.NewDebtorsService(debtorRepo, sv0)
-	sv2 := sv.NewCallListItemsService(callListItemRepo, sv0)
-	sv3 := sv.NewCallAttemptsService(callAttemptRepo, callListItemRepo, sv0)
+	sv1 := sv.NewDebtorsService(debtorRepo)
+	sv2 := sv.NewCallListItemsService(callListItemRepo)
+	sv3 := sv.NewCallAttemptsService(callAttemptRepo, callListItemRepo)
 	sv4 := sv.NewCallSessionsService(callSessionRepo)
 	callRecordsSv := sv.NewCallRecordsService(callRecordsRepo)
-	sv5 := sv.NewWorkspaceMembersService(workspaceMembersRepo)
 	sv6 := sv.NewWorkspacesService(workspacesRepo)
 
-	gw.NewHTTPGateway(app, sv0, sv5,sv6, callRecordsSv, sv1, sv2, sv3, sv4)
+	gw.NewHTTPGateway(app, sv6, callRecordsSv, sv1, sv2, sv3, sv4)
 
 	PORT := os.Getenv("PORT")
 
@@ -59,5 +61,4 @@ func main() {
 	}
 
 	app.Listen(":" + PORT)
-
 }

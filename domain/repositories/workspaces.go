@@ -25,12 +25,14 @@ type IWorkspacesRepository interface {
 	FindByFilter(filter entities.WorkspaceFilter) (*[]entities.WorkspaceDataModel, error)
 	UpdateWorkspace(id string, data entities.WorkspaceDataModel) error
 	DeleteWorkspace(id string) error
+	UpdateWorkspaceByUser(id string, userID string, data entities.WorkspaceDataModel) error
+	DeleteWorkspaceByUser(id string, userID string) error
 }
 
 func NewWorkspacesRepository(db *MongoDB) IWorkspacesRepository {
 	return &workspacesRepository{
 		Context:    db.Context,
-		Collection: db.MongoDB.Database(os.Getenv("DATABASE_NAME")).Collection("workspaces"),
+		Collection: db.MongoDB.Database(os.Getenv("MONGODB_NAME")).Collection("workspaces"),
 	}
 }
 
@@ -145,6 +147,50 @@ func (repo *workspacesRepository) DeleteWorkspace(id string) error {
 	result, err := repo.Collection.DeleteOne(repo.Context, filter)
 	if err != nil {
 		fiberlog.Errorf("Workspaces -> DeleteWorkspace: %s \n", err)
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+
+	return nil
+}
+
+func (repo *workspacesRepository) UpdateWorkspaceByUser(id string, userID string, data entities.WorkspaceDataModel) error {
+	filter := bson.M{"id": id, "owner_id": userID}
+	update := bson.M{}
+
+	if data.Name != "" {
+		update["name"] = data.Name
+	}
+	// OwnerID should ideally not be updatable, but if it is, we ensure we only update if we own it
+	if data.OwnerID != "" {
+		update["owner_id"] = data.OwnerID
+	}
+	update["updated_at"] = data.UpdatedAt
+
+	if len(update) == 0 {
+		return nil
+	}
+
+	result, err := repo.Collection.UpdateOne(repo.Context, filter, bson.M{"$set": update})
+	if err != nil {
+		fiberlog.Errorf("Workspaces -> UpdateWorkspaceByUser: %s \n", err)
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+
+	return nil
+}
+
+func (repo *workspacesRepository) DeleteWorkspaceByUser(id string, userID string) error {
+	filter := bson.M{"id": id, "owner_id": userID}
+
+	result, err := repo.Collection.DeleteOne(repo.Context, filter)
+	if err != nil {
+		fiberlog.Errorf("Workspaces -> DeleteWorkspaceByUser: %s \n", err)
 		return err
 	}
 	if result.DeletedCount == 0 {

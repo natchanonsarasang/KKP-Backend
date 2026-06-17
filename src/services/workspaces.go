@@ -169,17 +169,6 @@ func (sv *workspacesService) UpdateWorkspaceByUser(id string, userID string, dat
 		return errors.New("unauthorized: missing user id")
 	}
 
-	existing, err := sv.WorkspacesRepository.FindByID(id)
-	if err != nil {
-		return err
-	}
-	if existing == nil {
-		return errors.New("workspace not found")
-	}
-	if existing.OwnerID != userID {
-		return errors.New("unauthorized: you do not own this workspace")
-	}
-
 	// Ensure ID and OwnerID cannot be changed
 	data.ID = id
 	data.OwnerID = userID
@@ -189,7 +178,7 @@ func (sv *workspacesService) UpdateWorkspaceByUser(id string, userID string, dat
 		return err
 	}
 
-	return sv.WorkspacesRepository.UpdateWorkspace(id, data)
+	return sv.WorkspacesRepository.UpdateWorkspaceByUser(id, userID, data)
 }
 
 func (sv *workspacesService) DeleteWorkspaceByUser(id string, userID string) error {
@@ -200,16 +189,5 @@ func (sv *workspacesService) DeleteWorkspaceByUser(id string, userID string) err
 		return errors.New("unauthorized: missing user id")
 	}
 
-	existing, err := sv.WorkspacesRepository.FindByID(id)
-	if err != nil {
-		return err
-	}
-	if existing == nil {
-		return errors.New("workspace not found")
-	}
-	if existing.OwnerID != userID {
-		return errors.New("unauthorized: you do not own this workspace")
-	}
-
-	return sv.WorkspacesRepository.DeleteWorkspace(id)
+	return sv.WorkspacesRepository.DeleteWorkspaceByUser(id, userID)
 }

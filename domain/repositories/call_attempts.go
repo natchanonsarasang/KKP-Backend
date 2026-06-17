@@ -9,7 +9,6 @@ import (
 	fiberlog "github.com/gofiber/fiber/v2/log"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type callAttemptsRepository struct {
@@ -19,15 +18,15 @@ type callAttemptsRepository struct {
 
 type ICallAttemptsRepository interface {
 	Insert(data entities.CallAttemptModel) error
-	FindAllByWorkspace(workspaceID primitive.ObjectID) (*[]entities.CallAttemptModel, error)
-	FindByID(id primitive.ObjectID) (*entities.CallAttemptModel, error)
-	FindByIDByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) (*entities.CallAttemptModel, error)
+	FindAllByWorkspace(workspaceID string, userID string) (*[]entities.CallAttemptModel, error)
+	FindByID(id string) (*entities.CallAttemptModel, error)
+	FindByIDByUser(id string, workspaceID string) (*entities.CallAttemptModel, error)
 	// System Methods
-	Update(id primitive.ObjectID, data entities.CallAttemptModel) error
-	Delete(id primitive.ObjectID) error
+	Update(id string, data entities.CallAttemptModel) error
+	Delete(id string) error
 	// ByUser Methods
-	UpdateByUser(id primitive.ObjectID, workspaceID primitive.ObjectID, data entities.CallAttemptModel) error
-	DeleteByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) error
+	UpdateByUser(id string, workspaceID string, userID string, data entities.CallAttemptModel) error
+	DeleteByUser(id string, workspaceID string, userID string) error
 }
 
 func NewCallAttemptsRepository(db *MongoDB) ICallAttemptsRepository {
@@ -45,8 +44,8 @@ func (repo *callAttemptsRepository) Insert(data entities.CallAttemptModel) error
 	return nil
 }
 
-func (repo *callAttemptsRepository) FindAllByWorkspace(workspaceID primitive.ObjectID) (*[]entities.CallAttemptModel, error) {
-	filter := bson.M{"workspace_id": workspaceID}
+func (repo *callAttemptsRepository) FindAllByWorkspace(workspaceID string, userID string) (*[]entities.CallAttemptModel, error) {
+	filter := bson.M{"workspace_id": workspaceID, "user_id": userID}
 	var attempts []entities.CallAttemptModel
 	cursor, err := repo.Collection.Find(repo.Context, filter)
 	if err != nil {
@@ -61,8 +60,8 @@ func (repo *callAttemptsRepository) FindAllByWorkspace(workspaceID primitive.Obj
 	return &attempts, nil
 }
 
-func (repo *callAttemptsRepository) FindByID(id primitive.ObjectID) (*entities.CallAttemptModel, error) {
-	filter := bson.M{"_id": id}
+func (repo *callAttemptsRepository) FindByID(id string) (*entities.CallAttemptModel, error) {
+	filter := bson.M{"id": id}
 	var attempt entities.CallAttemptModel
 	if err := repo.Collection.FindOne(repo.Context, filter).Decode(&attempt); err != nil {
 		fiberlog.Errorf("CallAttempts -> FindByID: %s \n", err)
@@ -71,8 +70,8 @@ func (repo *callAttemptsRepository) FindByID(id primitive.ObjectID) (*entities.C
 	return &attempt, nil
 }
 
-func (repo *callAttemptsRepository) FindByIDByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) (*entities.CallAttemptModel, error) {
-	filter := bson.M{"_id": id, "workspace_id": workspaceID}
+func (repo *callAttemptsRepository) FindByIDByUser(id string, workspaceID string) (*entities.CallAttemptModel, error) {
+	filter := bson.M{"id": id, "workspace_id": workspaceID}
 	var attempt entities.CallAttemptModel
 	if err := repo.Collection.FindOne(repo.Context, filter).Decode(&attempt); err != nil {
 		fiberlog.Errorf("CallAttempts -> FindByIDByUser: %s \n", err)
@@ -81,8 +80,8 @@ func (repo *callAttemptsRepository) FindByIDByUser(id primitive.ObjectID, worksp
 	return &attempt, nil
 }
 
-func (repo *callAttemptsRepository) Update(id primitive.ObjectID, data entities.CallAttemptModel) error {
-	filter := bson.M{"_id": id}
+func (repo *callAttemptsRepository) Update(id string, data entities.CallAttemptModel) error {
+	filter := bson.M{"id": id}
 	update := bson.M{"$set": data}
 	result, err := repo.Collection.UpdateOne(repo.Context, filter, update)
 	if err != nil {
@@ -95,8 +94,8 @@ func (repo *callAttemptsRepository) Update(id primitive.ObjectID, data entities.
 	return nil
 }
 
-func (repo *callAttemptsRepository) Delete(id primitive.ObjectID) error {
-	filter := bson.M{"_id": id}
+func (repo *callAttemptsRepository) Delete(id string) error {
+	filter := bson.M{"id": id}
 	result, err := repo.Collection.DeleteOne(repo.Context, filter)
 	if err != nil {
 		fiberlog.Errorf("CallAttempts -> Delete: %s \n", err)
@@ -108,8 +107,8 @@ func (repo *callAttemptsRepository) Delete(id primitive.ObjectID) error {
 	return nil
 }
 
-func (repo *callAttemptsRepository) UpdateByUser(id primitive.ObjectID, workspaceID primitive.ObjectID, data entities.CallAttemptModel) error {
-	filter := bson.M{"_id": id, "workspace_id": workspaceID}
+func (repo *callAttemptsRepository) UpdateByUser(id string, workspaceID string, userID string, data entities.CallAttemptModel) error {
+	filter := bson.M{"id": id, "workspace_id": workspaceID, "user_id": userID}
 	update := bson.M{"$set": data}
 	result, err := repo.Collection.UpdateOne(repo.Context, filter, update)
 	if err != nil {
@@ -122,8 +121,8 @@ func (repo *callAttemptsRepository) UpdateByUser(id primitive.ObjectID, workspac
 	return nil
 }
 
-func (repo *callAttemptsRepository) DeleteByUser(id primitive.ObjectID, workspaceID primitive.ObjectID) error {
-	filter := bson.M{"_id": id, "workspace_id": workspaceID}
+func (repo *callAttemptsRepository) DeleteByUser(id string, workspaceID string, userID string) error {
+	filter := bson.M{"id": id, "workspace_id": workspaceID, "user_id": userID}
 	result, err := repo.Collection.DeleteOne(repo.Context, filter)
 	if err != nil {
 		fiberlog.Errorf("CallAttempts -> DeleteByUser: %s \n", err)

@@ -25,12 +25,14 @@ type ICallRecordsRepository interface {
 	FindAll() (*[]entities.CallRecordDataModel, error)
 	UpdateCallRecord(id string, data entities.CallRecordDataModel) error
 	DeleteCallRecord(id string) error
+	UpdateCallRecordByUser(id string, userID string, data entities.CallRecordDataModel) error
+	DeleteCallRecordByUser(id string, userID string) error
 }
 
 func NewCallRecordsRepository(db *MongoDB) ICallRecordsRepository {
 	return &callRecordsRepository{
 		Context:    db.Context,
-		Collection: db.MongoDB.Database(os.Getenv("DATABASE_NAME")).Collection("call_records"),
+		Collection: db.MongoDB.Database(os.Getenv("MONGODB_NAME")).Collection("call_records"),
 	}
 }
 
@@ -150,4 +152,34 @@ func (repo *callRecordsRepository) FindByFilter(filter entities.CallRecordFilter
 	}
 
 	return &records, nil
+}
+
+func (repo *callRecordsRepository) UpdateCallRecordByUser(id string, userID string, data entities.CallRecordDataModel) error {
+	filter := bson.M{"id": id, "user_id": userID}
+	if data.UpdatedAt.IsZero() {
+		data.UpdatedAt = time.Now().UTC()
+	}
+	update := bson.M{"$set": data}
+	result, err := repo.Collection.UpdateOne(repo.Context, filter, update)
+	if err != nil {
+		fiberlog.Errorf("CallRecords -> UpdateCallRecordByUser: %s \n", err)
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+func (repo *callRecordsRepository) DeleteCallRecordByUser(id string, userID string) error {
+	filter := bson.M{"id": id, "user_id": userID}
+	result, err := repo.Collection.DeleteOne(repo.Context, filter)
+	if err != nil {
+		fiberlog.Errorf("CallRecords -> DeleteCallRecordByUser: %s \n", err)
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }

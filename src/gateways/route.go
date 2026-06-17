@@ -6,13 +6,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func GatewayUsers(gateway HTTPGateway, app *fiber.App) {
-	api := app.Group("/api/v1/users", middlewares.SetJWtHeaderHandler())
-
-	api.Post("/add_user", gateway.CreateUser)
-	api.Get("/users", gateway.GetAllUserData)
-}
-
 func GatewayDebtors(gateway HTTPGateway, app *fiber.App) {
 	api := app.Group("/api/v1/debtors", middlewares.SetJWtHeaderHandler())
 
@@ -63,16 +56,6 @@ func GatewayCallRecords(gateway HTTPGateway, app *fiber.App) {
 	api.Delete("/:id", gateway.DeleteCallRecord)
 }
 
-
-func GatewayWorkspaceMembers(gateway HTTPGateway, app *fiber.App) {
-	api := app.Group("/api/v1/workspace-members")
-
-	api.Post("/", gateway.CreateWorkspaceMember)
-	api.Get("/", gateway.GetAllWorkspaceMembers)
-	api.Get("/:id", gateway.GetWorkspaceMemberByID)
-	api.Put("/:id", gateway.UpdateWorkspaceMember)
-	api.Delete("/:id", gateway.DeleteWorkspaceMember)
-}
 
 func GatewayWorkspaces(gateway HTTPGateway, app *fiber.App) {
 	api := app.Group("/api/v1/workspaces", middlewares.SetJWtHeaderHandler())
