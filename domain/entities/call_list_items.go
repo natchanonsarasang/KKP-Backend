@@ -20,3 +20,11 @@ type CallListItemModel struct {
 	CreatedAt    time.Time          `bson:"created_at,omitempty" json:"created_at"`
 	UpdatedAt    time.Time          `bson:"updated_at,omitempty" json:"updated_at"`
 }
+
+type CallListItemFilter struct {
+	WorkspaceID   string    `json:"workspace_id"`
+	UserID        string    `json:"user_id"`
+	CalledAtGte   time.Time `json:"called_at_gte"`
+	StatusesIn    []string  `json:"statuses_in"`
+	StatusesNotIn []string  `json:"statuses_not_in"`
+}

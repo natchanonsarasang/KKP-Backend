@@ -21,6 +21,7 @@ type ICallListItemsRepository interface {
 	FindAllByWorkspace(workspaceID string, userID string) (*[]entities.CallListItemModel, error)
 	FindByID(id string) (*entities.CallListItemModel, error)
 	FindByIDByUser(id string, workspaceID string) (*entities.CallListItemModel, error)
+	FindByFilter(filter entities.CallListItemFilter) (*[]entities.CallListItemModel, error)
 	// System Methods
 	Update(id string, data entities.CallListItemModel) error
 	Delete(id string) error
@@ -132,4 +133,40 @@ func (repo *callListItemsRepository) DeleteByUser(id string, workspaceID string,
 		return mongo.ErrNoDocuments
 	}
 	return nil
+}
+
+func (repo *callListItemsRepository) FindByFilter(filter entities.CallListItemFilter) (*[]entities.CallListItemModel, error) {
+	queryFilter := bson.M{
+		"workspace_id": filter.WorkspaceID,
+	}
+	if filter.UserID != "" {
+		queryFilter["user_id"] = filter.UserID
+	}
+	if !filter.CalledAtGte.IsZero() {
+		queryFilter["called_at"] = bson.M{"$gte": filter.CalledAtGte}
+	}
+
+	statusCond := bson.M{}
+	if len(filter.StatusesIn) > 0 {
+		statusCond["$in"] = filter.StatusesIn
+	}
+	if len(filter.StatusesNotIn) > 0 {
+		statusCond["$nin"] = filter.StatusesNotIn
+	}
+	if len(statusCond) > 0 {
+		queryFilter["status"] = statusCond
+	}
+
+	var items []entities.CallListItemModel
+	cursor, err := repo.Collection.Find(repo.Context, queryFilter)
+	if err != nil {
+		fiberlog.Errorf("CallListItems -> FindByFilter: %s \n", err)
+		return nil, err
+	}
+	defer cursor.Close(repo.Context)
+	if err := cursor.All(repo.Context, &items); err != nil {
+		fiberlog.Errorf("CallListItems -> FindByFilter: %s \n", err)
+		return nil, err
+	}
+	return &items, nil
 }
