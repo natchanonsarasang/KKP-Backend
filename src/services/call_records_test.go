@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -18,6 +19,8 @@ type mockCallRecordsRepository struct {
 	FindAllFunc      func() (*[]entities.CallRecordDataModel, error)
 	UpdateFunc       func(id string, data entities.CallRecordDataModel) error
 	DeleteFunc       func(id string) error
+	UpdateByUserFunc func(id string, userID string, data entities.CallRecordDataModel) error
+	DeleteByUserFunc func(id string, userID string) error
 }
 
 func (m *mockCallRecordsRepository) InsertCallRecord(data entities.CallRecordDataModel) error {
@@ -46,6 +49,44 @@ func (m *mockCallRecordsRepository) UpdateCallRecord(id string, data entities.Ca
 
 func (m *mockCallRecordsRepository) DeleteCallRecord(id string) error {
 	return m.DeleteFunc(id)
+}
+
+func (m *mockCallRecordsRepository) UpdateCallRecordByUser(id string, userID string, data entities.CallRecordDataModel) error {
+	if m.UpdateByUserFunc != nil {
+		return m.UpdateByUserFunc(id, userID, data)
+	}
+	if m.FindByIDFunc != nil {
+		rec, err := m.FindByIDFunc(id)
+		if err != nil {
+			return err
+		}
+		if rec == nil {
+			return errors.New("call record not found")
+		}
+		if rec.UserID != userID {
+			return errors.New("unauthorized: you do not own this call record")
+		}
+	}
+	return nil
+}
+
+func (m *mockCallRecordsRepository) DeleteCallRecordByUser(id string, userID string) error {
+	if m.DeleteByUserFunc != nil {
+		return m.DeleteByUserFunc(id, userID)
+	}
+	if m.FindByIDFunc != nil {
+		rec, err := m.FindByIDFunc(id)
+		if err != nil {
+			return err
+		}
+		if rec == nil {
+			return errors.New("call record not found")
+		}
+		if rec.UserID != userID {
+			return errors.New("unauthorized: you do not own this call record")
+		}
+	}
+	return nil
 }
 
 func TestCreateCallRecordValidation(t *testing.T) {

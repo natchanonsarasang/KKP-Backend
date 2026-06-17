@@ -95,6 +95,30 @@ func (m *mockCallSessionsRepository) DeleteCallSession(id string) error {
 	return nil
 }
 
+func (m *mockCallSessionsRepository) UpdateCallSessionByUser(id string, userID string, data entities.CallSessionDataModel) error {
+	session, exists := m.sessions[id]
+	if !exists {
+		return errors.New("session not found")
+	}
+	if session.UserID != userID {
+		return errors.New("unauthorized: user does not own this resource")
+	}
+	m.sessions[id] = data
+	return nil
+}
+
+func (m *mockCallSessionsRepository) DeleteCallSessionByUser(id string, userID string) error {
+	session, exists := m.sessions[id]
+	if !exists {
+		return errors.New("session not found")
+	}
+	if session.UserID != userID {
+		return errors.New("unauthorized: user does not own this resource")
+	}
+	delete(m.sessions, id)
+	return nil
+}
+
 func TestCallSessionsService_Validation(t *testing.T) {
 	repo := &mockCallSessionsRepository{sessions: make(map[string]entities.CallSessionDataModel)}
 	service := NewCallSessionsService(repo)
