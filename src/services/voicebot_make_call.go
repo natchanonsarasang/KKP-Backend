@@ -51,6 +51,7 @@ func (sv *voicebotMakeCallService) MakeCall(data entities.VoicebotMakeCallDataMo
 		Flow: buildFlow(data.OutboundID,
 			getStringVal(variables, "name"),
 			getStringVal(variables, "outstanding_amount"),
+			getStringVal(variables, "overdue_installment"),
 			getStringVal(variables, "due_date"),
 			getStringVal(variables, "policy_no")),
 		PhoneNumber:      data.PhoneNumber,
@@ -122,17 +123,18 @@ func prepareVoicebotVariables(input map[string]any) map[string]any {
 }
 
 func buildFlow(outboundID string, name string,
-	outstandingAmount string, dueDate string,
+	outstandingAmount string, overdueInstallment string, dueDate string,
 	policyNo string) string {
 	flow := fmt.Sprintf(
 		"<!outbound_id|%s!>|||"+
 			"<!name|%s!>|||"+
 			"<!outstanding_amount|%s!>|||"+
+			"<!overdue_installment|%s!>|||"+
 			"<!due_date|%s!>|||"+
 			"<!2|2!>|||"+
 			"<!policy_no|%s!>|||"+
 			"{{Confirm1}}",
-		outboundID, name, outstandingAmount, dueDate, policyNo)
+		outboundID, name, outstandingAmount, overdueInstallment, dueDate, policyNo)
 
 	return flow
 }
