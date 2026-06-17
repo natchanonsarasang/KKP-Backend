@@ -56,7 +56,6 @@ func GatewayCallRecords(gateway HTTPGateway, app *fiber.App) {
 	api.Delete("/:id", gateway.DeleteCallRecord)
 }
 
-
 func GatewayWorkspaces(gateway HTTPGateway, app *fiber.App) {
 	api := app.Group("/api/v1/workspaces", middlewares.SetJWtHeaderHandler())
 
@@ -65,4 +64,10 @@ func GatewayWorkspaces(gateway HTTPGateway, app *fiber.App) {
 	api.Get("/:id", gateway.GetWorkspaceByID)
 	api.Put("/:id", gateway.UpdateWorkspace)
 	api.Delete("/:id", gateway.DeleteWorkspace)
+}
+
+func GatewayVoicebotMakeCall(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/voicebot/make-call", middlewares.SetJWtHeaderHandler())
+
+	api.Post("/", gateway.MakeCall)
 }

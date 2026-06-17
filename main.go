@@ -51,8 +51,9 @@ func main() {
 	sv4 := sv.NewCallSessionsService(callSessionRepo)
 	callRecordsSv := sv.NewCallRecordsService(callRecordsRepo)
 	sv6 := sv.NewWorkspacesService(workspacesRepo)
+	voicebotMakeCallSv := sv.NewVoicebotMakeCallService()
 
-	gw.NewHTTPGateway(app, sv6, callRecordsSv, sv1, sv2, sv3, sv4)
+	gw.NewHTTPGateway(app, sv6, callRecordsSv, sv1, sv2, sv3, sv4, voicebotMakeCallSv)
 
 	PORT := os.Getenv("PORT")
 

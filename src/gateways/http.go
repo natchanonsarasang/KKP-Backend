@@ -7,12 +7,13 @@ import (
 )
 
 type HTTPGateway struct {
-	CallRecordsService  service.ICallRecordsService
-	DebtorService       service.IDebtorsService
-	CallListItemService service.ICallListItemsService
-	CallAttemptService  service.ICallAttemptsService
-	CallSessionService  service.ICallSessionsService
-	WorkspacesService   service.IWorkspacesService
+	CallRecordsService      service.ICallRecordsService
+	DebtorService           service.IDebtorsService
+	CallListItemService     service.ICallListItemsService
+	CallAttemptService      service.ICallAttemptsService
+	CallSessionService      service.ICallSessionsService
+	WorkspacesService       service.IWorkspacesService
+	VoicebotMakeCallService service.IVoicebotMakeCallService
 }
 
 func NewHTTPGateway(
@@ -23,14 +24,16 @@ func NewHTTPGateway(
 	items service.ICallListItemsService,
 	attempts service.ICallAttemptsService,
 	sessions service.ICallSessionsService,
+	voicebotMakeCall service.IVoicebotMakeCallService,
 ) {
 	gateway := &HTTPGateway{
-		WorkspacesService:   workspaces,
-		CallRecordsService:  callRecords,
-		DebtorService:       debtors,
-		CallListItemService: items,
-		CallAttemptService:  attempts,
-		CallSessionService:  sessions,
+		WorkspacesService:       workspaces,
+		CallRecordsService:      callRecords,
+		DebtorService:           debtors,
+		CallListItemService:     items,
+		CallAttemptService:      attempts,
+		CallSessionService:      sessions,
+		VoicebotMakeCallService: voicebotMakeCall,
 	}
 
 	GatewayWorkspaces(*gateway, app)
@@ -39,4 +42,5 @@ func NewHTTPGateway(
 	GatewayCallListItems(*gateway, app)
 	GatewayCallAttempts(*gateway, app)
 	GatewayCallSessions(*gateway, app)
+	GatewayVoicebotMakeCall(*gateway, app)
 }
