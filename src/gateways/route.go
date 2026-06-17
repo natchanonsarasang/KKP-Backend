@@ -66,3 +66,9 @@ func GatewayWorkspaces(gateway HTTPGateway, app *fiber.App) {
 	api.Put("/:id", gateway.UpdateWorkspace)
 	api.Delete("/:id", gateway.DeleteWorkspace)
 }
+
+func GatewayWebhooks(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/webhooks")
+
+	api.Post("/botnoi", gateway.Webhook)
+}
