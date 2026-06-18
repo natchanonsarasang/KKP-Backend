@@ -28,9 +28,23 @@ type DebtorModel struct {
 	AcceptCount        int                `bson:"accept_count,omitempty" json:"accept_count"`
 	RejectCount        int                `bson:"reject_count,omitempty" json:"reject_count"`
 	OtherCount         int                `bson:"other_count,omitempty" json:"other_count"`
-	Variables          *interface{}       `bson:"variables,omitempty" json:"variables"`
+	Variables          map[string]string    `bson:"variables,omitempty" json:"variables"`
 	UserID             string             `bson:"user_id,omitempty" json:"user_id"`
 	WorkspaceID        string             `bson:"workspace_id,omitempty" json:"workspace_id"`
 	IsBlocked          bool               `bson:"is_blocked,omitempty" json:"is_blocked"`
 	DateCon            string             `bson:"date_con,omitempty" json:"date_con"`
+}
+
+type DebtorStatsUpdate struct {
+	ContactAttempts    int       `bson:"contact_attempts"`
+	SuccessfulContacts int       `bson:"successful_contacts"`
+	PickedUpCount      int       `bson:"picked_up_count"`
+	NotPickedUpCount   int       `bson:"not_picked_up_count"`
+	AcceptCount        int       `bson:"accept_count"`
+	RejectCount        int       `bson:"reject_count"`
+	OtherCount         int       `bson:"other_count"`
+	LastContactAt      time.Time `bson:"last_contact_at"`
+	LastResponse       string    `bson:"last_response"`
+	CallOutcome        string    `bson:"call_outcome"`
+	CallAnswered       bool      `bson:"call_answer"`
 }

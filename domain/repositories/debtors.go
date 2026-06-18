@@ -28,6 +28,9 @@ type IDebtorsRepository interface {
 	// ByUser Methods
 	UpdateByUser(id string, workspaceID string, userID string, data entities.DebtorModel) error
 	DeleteByUser(id string, workspaceID string, userID string) error
+	// Process session Methods
+	FindByIDs(ids []string) (*[]entities.DebtorModel, error)
+	UpdateStats(id string, stats entities.DebtorStatsUpdate) error
 }
 
 func NewDebtorsRepository(db *MongoDB) IDebtorsRepository {
@@ -147,4 +150,30 @@ func (repo *debtorsRepository) DeleteByUser(id string, workspaceID string, userI
 		return mongo.ErrNoDocuments
 	}
 	return nil
+}
+
+func (repo *debtorsRepository) FindByIDs(ids []string) (*[]entities.DebtorModel, error) {
+	filter := bson.M{"id": bson.M{"$in": ids}}
+	var debtors []entities.DebtorModel
+	cursor, err := repo.Collection.Find(repo.Context, filter)
+	if err != nil {
+		fiberlog.Errorf("Debtors -> FindByIDs: %s \n", err)
+		return nil, err
+	}
+	defer cursor.Close(repo.Context)
+	if err := cursor.All(repo.Context, &debtors); err != nil {
+		fiberlog.Errorf("Debtors -> FindByIDs: %s \n", err)
+		return nil, err
+	}
+	return &debtors, nil
+}
+
+func (repo *debtorsRepository) UpdateStats(id string, stats entities.DebtorStatsUpdate) error {
+	filter := bson.M{"id": id}
+	update := bson.M{"$set": stats}
+	_, err := repo.Collection.UpdateOne(repo.Context, filter, update)
+	if err != nil {
+		fiberlog.Errorf("Debtors -> UpdateStats: %s \n", err)
+	}
+	return err
 }
