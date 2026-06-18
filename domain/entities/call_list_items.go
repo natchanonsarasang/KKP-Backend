@@ -18,6 +18,7 @@ type CallListItemModel struct {
 	PickedUp     bool               `bson:"picked_up,omitempty" json:"picked_up"`
 	AICategory   string             `bson:"ai_category,omitempty" json:"ai_category"`
 	NextRetryAt  *time.Time         `bson:"next_retry_at,omitempty" json:"next_retry_at"`
+	RetryCount   int                `bson:"retry_count,omitempty" json:"retry_count"`
 	Notes        string             `bson:"notes,omitempty" json:"notes"`
 	CreatedAt    time.Time          `bson:"created_at,omitempty" json:"created_at"`
 	UpdatedAt    time.Time          `bson:"updated_at,omitempty" json:"updated_at"`

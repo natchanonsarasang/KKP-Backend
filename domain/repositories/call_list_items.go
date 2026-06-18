@@ -5,10 +5,12 @@ import (
 	. "go-fiber-template/domain/datasources"
 	"go-fiber-template/domain/entities"
 	"os"
+	"time"
 
 	fiberlog "github.com/gofiber/fiber/v2/log"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type callListItemsRepository struct {
@@ -28,6 +30,11 @@ type ICallListItemsRepository interface {
 	// ByUser Methods
 	UpdateByUser(id string, workspaceID string, userID string, data entities.CallListItemModel) error
 	DeleteByUser(id string, workspaceID string, userID string) error
+	// Process session Methods
+	FindByStatus(workspaceID, userID, status string) (*[]entities.CallListItemModel, error)
+	UpdateManyStatus(ids []string, status, outcome string, pickedUp bool) error
+	FindPendingBySlot(workspaceID, userID string, limit int) (*[]entities.CallListItemModel, error)
+	CountWaitingRetry(workspaceID, userID string) (int64, error)
 }
 
 func NewCallListItemsRepository(db *MongoDB) ICallListItemsRepository {
@@ -169,4 +176,85 @@ func (repo *callListItemsRepository) FindByFilter(filter entities.CallListItemFi
 		return nil, err
 	}
 	return &items, nil
+}
+
+func (repo *callListItemsRepository) FindByStatus(workspaceID, userID, status string) (*[]entities.CallListItemModel, error) {
+	filter := bson.M{"workspace_id": workspaceID, "user_id": userID, "status": status}
+	var items []entities.CallListItemModel
+	cursor, err := repo.Collection.Find(repo.Context, filter)
+	if err != nil {
+		fiberlog.Errorf("CallListItems -> FindByStatus: %s \n", err)
+		return nil, err
+	}
+	defer cursor.Close(repo.Context)
+	if err := cursor.All(repo.Context, &items); err != nil {
+		fiberlog.Errorf("CallListItems -> FindByStatus: %s \n", err)
+		return nil, err
+	}
+	return &items, nil
+}
+
+func (repo *callListItemsRepository) UpdateManyStatus(ids []string, status, outcome string, pickedUp bool) error {
+	filter := bson.M{"id": bson.M{"$in": ids}}
+	update := bson.M{"$set": bson.M{
+		"status":       status,
+		"call_outcome": outcome,
+		"picked_up":    pickedUp,
+		"updated_at":   time.Now().UTC(),
+	}}
+	_, err := repo.Collection.UpdateMany(repo.Context, filter, update)
+	if err != nil {
+		fiberlog.Errorf("CallListItems -> UpdateManyStatus: %s \n", err)
+	}
+	return err
+}
+
+// FindPendingBySlot returns items ready to be called: status=pending, or
+// pending_retry/retry_pending whose next_retry_at has passed (or is unset).
+func (repo *callListItemsRepository) FindPendingBySlot(workspaceID, userID string, limit int) (*[]entities.CallListItemModel, error) {
+	now := time.Now()
+	filter := bson.M{
+		"workspace_id": workspaceID,
+		"user_id":      userID,
+		"$or": bson.A{
+			bson.M{"status": "pending"},
+			bson.M{
+				"status": bson.M{"$in": bson.A{"pending_retry", "retry_pending"}},
+				"$or": bson.A{
+					bson.M{"next_retry_at": nil},
+					bson.M{"next_retry_at": bson.M{"$lte": now}},
+				},
+			},
+		},
+	}
+	opts := options.Find().SetLimit(int64(limit))
+	var items []entities.CallListItemModel
+	cursor, err := repo.Collection.Find(repo.Context, filter, opts)
+	if err != nil {
+		fiberlog.Errorf("CallListItems -> FindPendingBySlot: %s \n", err)
+		return nil, err
+	}
+	defer cursor.Close(repo.Context)
+	if err := cursor.All(repo.Context, &items); err != nil {
+		fiberlog.Errorf("CallListItems -> FindPendingBySlot: %s \n", err)
+		return nil, err
+	}
+	return &items, nil
+}
+
+// CountWaitingRetry counts retry items whose next_retry_at is still in the future.
+func (repo *callListItemsRepository) CountWaitingRetry(workspaceID, userID string) (int64, error) {
+	now := time.Now()
+	filter := bson.M{
+		"workspace_id": workspaceID,
+		"user_id":      userID,
+		"status":       bson.M{"$in": bson.A{"pending_retry", "retry_pending"}},
+		"next_retry_at": bson.M{"$gt": now},
+	}
+	count, err := repo.Collection.CountDocuments(repo.Context, filter)
+	if err != nil {
+		fiberlog.Errorf("CallListItems -> CountWaitingRetry: %s \n", err)
+		return 0, err
+	}
+	return count, nil
 }

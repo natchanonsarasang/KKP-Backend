@@ -78,3 +78,10 @@ func GatewayVoicebotMakeCall(gateway HTTPGateway, app *fiber.App) {
 
 	api.Post("/", gateway.MakeCall)
 }
+
+
+func GatewayProcessCallSession(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/call-process", middlewares.SetJWtHeaderHandler())
+
+	api.Post("/", gateway.ProcessCallSession)
+}

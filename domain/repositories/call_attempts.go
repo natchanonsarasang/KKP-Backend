@@ -30,6 +30,8 @@ type ICallAttemptsRepository interface {
 	UpdateByUser(id string, workspaceID string, userID string, data entities.CallAttemptModel) error
 	DeleteByUser(id string, workspaceID string, userID string) error
 	UpdateMultipleByUser(filter entities.CallAttemptFilter, data entities.CallAttemptModel) (int64, error)
+	// Process session Methods
+	UpdateStatusByListItemID(listItemID, fromStatus, toStatus, outcome string, pickedUp bool, errorReason string) error
 }
 
 func NewCallAttemptsRepository(db *MongoDB) ICallAttemptsRepository {
@@ -171,6 +173,21 @@ func (repo *callAttemptsRepository) FindByFilter(filter entities.CallAttemptFilt
 }
 
 
+
+func (repo *callAttemptsRepository) UpdateStatusByListItemID(listItemID, fromStatus, toStatus, outcome string, pickedUp bool, errorReason string) error {
+	filter := bson.M{"call_list_item_id": listItemID, "status": fromStatus}
+	update := bson.M{"$set": bson.M{
+		"status":       toStatus,
+		"call_outcome": outcome,
+		"picked_up":    pickedUp,
+		"error_reason": errorReason,
+	}}
+	_, err := repo.Collection.UpdateMany(repo.Context, filter, update)
+	if err != nil {
+		fiberlog.Errorf("CallAttempts -> UpdateStatusByListItemID: %s \n", err)
+	}
+	return err
+}
 
 func (repo *callAttemptsRepository) UpdateMultipleByUser(filter entities.CallAttemptFilter, data entities.CallAttemptModel) (int64, error) {
 	queryFilter := bson.M{
