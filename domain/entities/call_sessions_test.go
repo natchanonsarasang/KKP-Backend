@@ -13,24 +13,35 @@ func TestCallSessionDataModel(t *testing.T) {
 	startedAt := now.Add(time.Minute)
 	completedAt := now.Add(10 * time.Minute)
 	errMsg := "some error occurred"
-	var settings interface{} = map[string]interface{}{"retry_count": float64(3)}
+	settings := CallSessionSettings{
+		MaxRetries:         3,
+		DelayBetweenCalls:  10,
+		ConcurrentCalls:    2,
+		BusinessHoursOnly:  true,
+		BusinessHoursStart: "09:00",
+		BusinessHoursEnd:   "17:00",
+		BusinessDays:       []int{1, 2, 3, 4, 5},
+		TestMode:           false,
+		TimezoneOffset:     420,
+		Interruptible:      true,
+	}
 
 	session := CallSessionDataModel{
 		ID:             "session-uuid-123",
-		UserID:          "usr-1",
-		WorkspaceID:     "ws-1",
+		UserID:         "usr-1",
+		WorkspaceID:    "ws-1",
 		Status:         "running",
 		TotalCalls:     10,
 		CompletedCalls: 5,
 		FailedCalls:    2,
 		ConfirmedCalls: 3,
 		TokenUsed:      150,
-		Settings:       &settings,
+		Settings:       settings,
 		ErrorMessage:   &errMsg,
 		StartedAt:      &startedAt,
 		CompletedAt:    &completedAt,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 
 	// Test JSON Marshalling
@@ -54,10 +65,16 @@ func TestCallSessionDataModel(t *testing.T) {
 	assert.Equal(t, session.ConfirmedCalls, unmarshaled.ConfirmedCalls)
 	assert.Equal(t, session.TokenUsed, unmarshaled.TokenUsed)
 
-	assert.NotNil(t, unmarshaled.Settings)
-	settingsMap, ok := (*unmarshaled.Settings).(map[string]interface{})
-	assert.True(t, ok)
-	assert.Equal(t, float64(3), settingsMap["retry_count"])
+	assert.Equal(t, session.Settings.MaxRetries, unmarshaled.Settings.MaxRetries)
+	assert.Equal(t, session.Settings.DelayBetweenCalls, unmarshaled.Settings.DelayBetweenCalls)
+	assert.Equal(t, session.Settings.ConcurrentCalls, unmarshaled.Settings.ConcurrentCalls)
+	assert.Equal(t, session.Settings.BusinessHoursOnly, unmarshaled.Settings.BusinessHoursOnly)
+	assert.Equal(t, session.Settings.BusinessHoursStart, unmarshaled.Settings.BusinessHoursStart)
+	assert.Equal(t, session.Settings.BusinessHoursEnd, unmarshaled.Settings.BusinessHoursEnd)
+	assert.Equal(t, session.Settings.BusinessDays, unmarshaled.Settings.BusinessDays)
+	assert.Equal(t, session.Settings.TestMode, unmarshaled.Settings.TestMode)
+	assert.Equal(t, session.Settings.TimezoneOffset, unmarshaled.Settings.TimezoneOffset)
+	assert.Equal(t, session.Settings.Interruptible, unmarshaled.Settings.Interruptible)
 
 	assert.NotNil(t, unmarshaled.ErrorMessage)
 	assert.Equal(t, *session.ErrorMessage, *unmarshaled.ErrorMessage)
