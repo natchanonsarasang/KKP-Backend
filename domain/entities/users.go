@@ -15,7 +15,8 @@ type UserDataModel struct {
 	Name          string    `json:"name" bson:"name,omitempty"`
 	Picture       string    `json:"picture" bson:"picture,omitempty"`
 	GoogleID      string    `json:"google_id" bson:"google_id,omitempty"`
-	Provider      string    `json:"provider" bson:"provider,omitempty"` // e.g. "google" or "password"
+	MicrosoftID   string    `json:"microsoft_id" bson:"microsoft_id,omitempty"`
+	Provider      string    `json:"provider" bson:"provider,omitempty"` // e.g. "google", "microsoft", or "password"
 	PasswordHash  string    `json:"-" bson:"password_hash,omitempty"`   // bcrypt hash; never serialized to clients
 	EmailVerified bool      `json:"email_verified" bson:"email_verified,omitempty"`
 	LastLoginAt   time.Time `json:"last_login_at" bson:"last_login_at,omitempty"`
@@ -35,11 +36,12 @@ func NewUser() UserDataModel {
 
 // UserFilter is used to query users by an optional set of fields.
 type UserFilter struct {
-	ID       string `json:"id"`
-	Email    string `json:"email"`
-	Name     string `json:"name"`
-	GoogleID string `json:"google_id"`
-	Provider string `json:"provider"`
+	ID          string `json:"id"`
+	Email       string `json:"email"`
+	Name        string `json:"name"`
+	GoogleID    string `json:"google_id"`
+	MicrosoftID string `json:"microsoft_id"`
+	Provider    string `json:"provider"`
 }
 
 // SignUpRequest is the body posted to the email/password registration endpoint.
@@ -61,6 +63,12 @@ type GoogleSignInRequest struct {
 	IDToken string `json:"id_token"`
 }
 
+// MicrosoftSignInRequest is the body posted to the Microsoft sign-in endpoint.
+// IDToken is the Microsoft ID token (credential) obtained on the frontend.
+type MicrosoftSignInRequest struct {
+	IDToken string `json:"id_token"`
+}
+
 // GoogleTokenInfo maps the response from Google's tokeninfo endpoint.
 // email_verified is returned as a string ("true"/"false") by Google.
 type GoogleTokenInfo struct {
@@ -73,6 +81,16 @@ type GoogleTokenInfo struct {
 	GivenName     string `json:"given_name"`
 	FamilyName    string `json:"family_name"`
 	Exp           string `json:"exp"`
+}
+
+// MicrosoftTokenInfo maps the standard claims of a Microsoft ID token.
+type MicrosoftTokenInfo struct {
+	Aud               string `json:"aud"`
+	Sub               string `json:"sub"`
+	Email             string `json:"email"`
+	Name              string `json:"name"`
+	PreferredUsername string `json:"preferred_username"`
+	Oid               string `json:"oid"`
 }
 
 // AuthResponse is returned to the client after a successful sign-in.

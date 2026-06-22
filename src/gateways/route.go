@@ -73,6 +73,7 @@ func GatewayAuth(gateway HTTPGateway, app *fiber.App) {
 	api.Post("/register", gateway.Register)
 	api.Post("/login", gateway.Login)
 	api.Post("/google", gateway.GoogleSignIn)
+	api.Post("/microsoft", gateway.MicrosoftSignIn)
 }
 
 func GatewayUsers(gateway HTTPGateway, app *fiber.App) {

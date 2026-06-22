@@ -58,7 +58,8 @@ func main() {
 	voicebotMakeCallSv := sv.NewVoicebotMakeCallService()
 	callProcessSv := sv.NewCallProcessService(callSessionRepo, callListItemRepo, debtorRepo, callRecordsRepo, callAttemptRepo)
 	googleOAuthClient := client.NewGoogleOAuthClient()
-	usersSv := sv.NewUsersService(usersRepo, googleOAuthClient)
+	microsoftOAuthClient := client.NewMicrosoftOAuthClient()
+	usersSv := sv.NewUsersService(usersRepo, googleOAuthClient, microsoftOAuthClient)
 
 	gw.NewHTTPGateway(app, sv6, callRecordsSv, sv1, sv2, sv3, sv4, webhookSv, voicebotMakeCallSv, callProcessSv, usersSv)
 

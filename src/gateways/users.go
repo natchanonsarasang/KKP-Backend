@@ -60,6 +60,27 @@ func (h *HTTPGateway) GoogleSignIn(ctx *fiber.Ctx) error {
 	return ctx.Status(fiber.StatusOK).JSON(entities.ResponseModel{Message: "success", Data: auth})
 }
 
+// MicrosoftSignIn handles POST /api/v1/auth/microsoft (public).
+// It verifies the Microsoft ID token, provisions/links the user, and returns an
+// application JWT plus the user profile.
+func (h *HTTPGateway) MicrosoftSignIn(ctx *fiber.Ctx) error {
+	bodyData := entities.MicrosoftSignInRequest{}
+	if err := ctx.BodyParser(&bodyData); err != nil {
+		return ctx.Status(fiber.StatusUnprocessableEntity).JSON(entities.ResponseMessage{Message: "invalid json body"})
+	}
+
+	if bodyData.IDToken == "" {
+		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: "id_token is required"})
+	}
+
+	auth, err := h.UsersService.MicrosoftSignIn(bodyData.IDToken)
+	if err != nil {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(entities.ResponseMessage{Message: err.Error()})
+	}
+
+	return ctx.Status(fiber.StatusOK).JSON(entities.ResponseModel{Message: "success", Data: auth})
+}
+
 // GetMe handles GET /api/v1/users/me — the authenticated user's own profile.
 func (h *HTTPGateway) GetMe(ctx *fiber.Ctx) error {
 	tokenDetails, err := middlewares.DecodeJWTToken(ctx)

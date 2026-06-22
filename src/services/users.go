@@ -14,8 +14,9 @@ import (
 )
 
 type usersService struct {
-	UsersRepository   repositories.IUsersRepository
-	GoogleOAuthClient client.IGoogleOAuthClient
+	UsersRepository      repositories.IUsersRepository
+	GoogleOAuthClient    client.IGoogleOAuthClient
+	MicrosoftOAuthClient client.IMicrosoftOAuthClient
 }
 
 type IUsersService interface {
@@ -29,6 +30,10 @@ type IUsersService interface {
 	// issues an application JWT.
 	GoogleSignIn(idToken string) (*entities.AuthResponse, error)
 
+	// Microsoft Sign-In: verifies the Microsoft ID token, upserts the user, and
+	// issues an application JWT.
+	MicrosoftSignIn(idToken string) (*entities.AuthResponse, error)
+
 	// CRUD
 	CreateUser(data entities.UserDataModel) (*entities.UserDataModel, error)
 	GetUserByID(id string) (*entities.UserDataModel, error)
@@ -37,10 +42,11 @@ type IUsersService interface {
 	DeleteUser(id string) error
 }
 
-func NewUsersService(repo repositories.IUsersRepository, googleClient client.IGoogleOAuthClient) IUsersService {
+func NewUsersService(repo repositories.IUsersRepository, googleClient client.IGoogleOAuthClient, microsoftClient client.IMicrosoftOAuthClient) IUsersService {
 	return &usersService{
-		UsersRepository:   repo,
-		GoogleOAuthClient: googleClient,
+		UsersRepository:      repo,
+		GoogleOAuthClient:    googleClient,
+		MicrosoftOAuthClient: microsoftClient,
 	}
 }
 
@@ -187,6 +193,64 @@ func (sv *usersService) GoogleSignIn(idToken string) (*entities.AuthResponse, er
 		user.GoogleID = info.Sub
 		user.Provider = "google"
 		user.EmailVerified = info.EmailVerified == "true"
+		user.LastLoginAt = now
+		user.UpdatedAt = now
+
+		if err := sv.UsersRepository.UpdateUser(user.ID, *user); err != nil {
+			return nil, err
+		}
+	}
+
+	return sv.issueAuthResponse(user)
+}
+
+// ===== Microsoft Sign-In =====
+
+func (sv *usersService) MicrosoftSignIn(idToken string) (*entities.AuthResponse, error) {
+	if idToken == "" {
+		return nil, errors.New("id_token must not be empty")
+	}
+
+	info, err := sv.MicrosoftOAuthClient.VerifyIDToken(idToken)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+
+	// Find an existing user by Microsoft subject, falling back to email so accounts
+	// created through another flow get linked instead of duplicated.
+	user, err := sv.UsersRepository.FindByMicrosoftID(info.Sub)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		user, err = sv.UsersRepository.FindByEmail(info.Email)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if user == nil {
+		// First-time sign-in: provision the account.
+		newUser := entities.NewUser()
+		newUser.Email = info.Email
+		newUser.Name = info.Name
+		newUser.MicrosoftID = info.Sub
+		newUser.Provider = "microsoft"
+		newUser.EmailVerified = true // Microsoft verified account by default
+		newUser.LastLoginAt = now
+
+		if err := sv.UsersRepository.InsertUser(newUser); err != nil {
+			return nil, err
+		}
+		user = &newUser
+	} else {
+		// Returning user: refresh profile + login metadata.
+		user.Name = info.Name
+		user.MicrosoftID = info.Sub
+		user.Provider = "microsoft"
+		user.EmailVerified = true
 		user.LastLoginAt = now
 		user.UpdatedAt = now
 

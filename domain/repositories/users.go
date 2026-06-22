@@ -24,6 +24,7 @@ type IUsersRepository interface {
 	FindByID(id string) (*entities.UserDataModel, error)
 	FindByEmail(email string) (*entities.UserDataModel, error)
 	FindByGoogleID(googleID string) (*entities.UserDataModel, error)
+	FindByMicrosoftID(microsoftID string) (*entities.UserDataModel, error)
 	FindByFilter(filter entities.UserFilter) (*[]entities.UserDataModel, error)
 	UpdateUser(id string, data entities.UserDataModel) error
 	DeleteUser(id string) error
@@ -113,6 +114,23 @@ func (repo *usersRepository) FindByGoogleID(googleID string) (*entities.UserData
 	return &user, nil
 }
 
+func (repo *usersRepository) FindByMicrosoftID(microsoftID string) (*entities.UserDataModel, error) {
+	filter := bson.M{"microsoft_id": microsoftID}
+	var user entities.UserDataModel
+
+	err := repo.Collection.FindOne(repo.Context, filter).Decode(&user)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		fiberlog.Errorf("Users -> FindByMicrosoftID: %s \n", err)
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+
 func (repo *usersRepository) FindByFilter(filterData entities.UserFilter) (*[]entities.UserDataModel, error) {
 	options := options.Find()
 	filter := bson.M{}
@@ -128,6 +146,9 @@ func (repo *usersRepository) FindByFilter(filterData entities.UserFilter) (*[]en
 	}
 	if filterData.GoogleID != "" {
 		filter["google_id"] = filterData.GoogleID
+	}
+	if filterData.MicrosoftID != "" {
+		filter["microsoft_id"] = filterData.MicrosoftID
 	}
 	if filterData.Provider != "" {
 		filter["provider"] = filterData.Provider
@@ -166,6 +187,9 @@ func (repo *usersRepository) UpdateUser(id string, data entities.UserDataModel) 
 	}
 	if data.GoogleID != "" {
 		update["google_id"] = data.GoogleID
+	}
+	if data.MicrosoftID != "" {
+		update["microsoft_id"] = data.MicrosoftID
 	}
 	if data.Provider != "" {
 		update["provider"] = data.Provider

@@ -13,7 +13,12 @@ func TestCallSessionDataModel(t *testing.T) {
 	startedAt := now.Add(time.Minute)
 	completedAt := now.Add(10 * time.Minute)
 	errMsg := "some error occurred"
-	var settings interface{} = map[string]interface{}{"retry_count": float64(3)}
+	settings := CallSessionSettings{
+		MaxRetries:        3,
+		DelayBetweenCalls: 5,
+		ConcurrentCalls:   2,
+		BusinessHoursOnly: true,
+	}
 
 	session := CallSessionDataModel{
 		ID:             "session-uuid-123",
@@ -25,7 +30,7 @@ func TestCallSessionDataModel(t *testing.T) {
 		FailedCalls:    2,
 		ConfirmedCalls: 3,
 		TokenUsed:      150,
-		Settings:       &settings,
+		Settings:       settings,
 		ErrorMessage:   &errMsg,
 		StartedAt:      &startedAt,
 		CompletedAt:    &completedAt,
@@ -54,10 +59,10 @@ func TestCallSessionDataModel(t *testing.T) {
 	assert.Equal(t, session.ConfirmedCalls, unmarshaled.ConfirmedCalls)
 	assert.Equal(t, session.TokenUsed, unmarshaled.TokenUsed)
 
-	assert.NotNil(t, unmarshaled.Settings)
-	settingsMap, ok := (*unmarshaled.Settings).(map[string]interface{})
-	assert.True(t, ok)
-	assert.Equal(t, float64(3), settingsMap["retry_count"])
+	assert.Equal(t, session.Settings.MaxRetries, unmarshaled.Settings.MaxRetries)
+	assert.Equal(t, session.Settings.DelayBetweenCalls, unmarshaled.Settings.DelayBetweenCalls)
+	assert.Equal(t, session.Settings.ConcurrentCalls, unmarshaled.Settings.ConcurrentCalls)
+	assert.Equal(t, session.Settings.BusinessHoursOnly, unmarshaled.Settings.BusinessHoursOnly)
 
 	assert.NotNil(t, unmarshaled.ErrorMessage)
 	assert.Equal(t, *session.ErrorMessage, *unmarshaled.ErrorMessage)
