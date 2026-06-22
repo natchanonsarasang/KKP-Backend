@@ -9,6 +9,7 @@ import (
 	fiberlog "github.com/gofiber/fiber/v2/log"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type debtorsRepository struct {
@@ -31,6 +32,12 @@ type IDebtorsRepository interface {
 	// Process session Methods
 	FindByIDs(ids []string) (*[]entities.DebtorModel, error)
 	UpdateStats(id string, stats entities.DebtorStatsUpdate) error
+	// FindNeverContacted returns debtors in the workspace/user that have never been
+	// contacted (last_contact_at unset/null), excluding the given debtor ids,
+	// limited to `limit`. Callers pass the debtor ids that already have a pending
+	// call_list_item so those aren't queued twice. Used to top up spare
+	// concurrency slots with fresh debtors.
+	FindNeverContacted(workspaceID, userID string, excludeIDs []string, limit int) (*[]entities.DebtorModel, error)
 }
 
 func NewDebtorsRepository(db *MongoDB) IDebtorsRepository {
@@ -163,6 +170,31 @@ func (repo *debtorsRepository) FindByIDs(ids []string) (*[]entities.DebtorModel,
 	defer cursor.Close(repo.Context)
 	if err := cursor.All(repo.Context, &debtors); err != nil {
 		fiberlog.Errorf("Debtors -> FindByIDs: %s \n", err)
+		return nil, err
+	}
+	return &debtors, nil
+}
+
+func (repo *debtorsRepository) FindNeverContacted(workspaceID, userID string, excludeIDs []string, limit int) (*[]entities.DebtorModel, error) {
+	filter := bson.M{
+		"workspace_id":    workspaceID,
+		"user_id":         userID,
+		"last_contact_at": nil, // matches both null and missing field
+	}
+	if len(excludeIDs) > 0 {
+		filter["id"] = bson.M{"$nin": excludeIDs} // skip debtors already queued (pending call_list_item)
+	}
+
+	opts := options.Find().SetLimit(int64(limit))
+	var debtors []entities.DebtorModel
+	cursor, err := repo.Collection.Find(repo.Context, filter, opts)
+	if err != nil {
+		fiberlog.Errorf("Debtors -> FindNeverContacted: %s \n", err)
+		return nil, err
+	}
+	defer cursor.Close(repo.Context)
+	if err := cursor.All(repo.Context, &debtors); err != nil {
+		fiberlog.Errorf("Debtors -> FindNeverContacted: %s \n", err)
 		return nil, err
 	}
 	return &debtors, nil
