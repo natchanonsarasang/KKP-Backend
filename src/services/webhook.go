@@ -57,6 +57,7 @@ type webhookService struct {
 	CallListItemService ICallListItemsService
 	CallAttemptService  ICallAttemptsService
 	CallSessionService  ICallSessionsService
+	ProcessService      ICallProcessService
 }
 
 func NewWebhookService(
@@ -65,6 +66,7 @@ func NewWebhookService(
 	items ICallListItemsService,
 	attempts ICallAttemptsService,
 	sessions ICallSessionsService,
+	processSvc ICallProcessService,
 ) IWebhookService {
 	return &webhookService{
 		CallRecordsService:  callRecords,
@@ -72,6 +74,7 @@ func NewWebhookService(
 		CallListItemService: items,
 		CallAttemptService:  attempts,
 		CallSessionService:  sessions,
+		ProcessService:      processSvc,
 	}
 }
 
@@ -166,16 +169,16 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 	}
 
 	outcomeMap := map[entities.CallStatus]string{
-		entities.StatusConfirmed:  "Confirmed",
-		entities.StatusDeclined:   "Declined",
-		entities.StatusNoResponse: "No Response",
-		entities.StatusNoAnswer:   "No Answer",
-		entities.StatusCompleted:  "Completed",
-		entities.StatusFailed:     "Failed",
-		entities.StatusBusy:       "Busy",
-		entities.StatusRejected:   "Rejected",
-		entities.StatusVoicemail:  "Voicemail",
-		entities.StatusHangedUp:   "Hangup",
+		entities.StatusConfirmed:     "Confirmed",
+		entities.StatusDeclined:      "Declined",
+		entities.StatusNoResponse:    "No Response",
+		entities.StatusNoAnswer:      "No Answer",
+		entities.StatusCompleted:     "Completed",
+		entities.StatusFailed:        "Failed",
+		entities.StatusBusy:          "Busy",
+		entities.StatusRejected:      "Rejected",
+		entities.StatusVoicemail:     "Voicemail",
+		entities.StatusHangedUp:      "Hangup",
 		entities.StatusNotConvenient: "Not Convenient",
 	}
 	callOutcome := outcomeMap[mappedStatus]
@@ -306,14 +309,7 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 					debtor.UpdatedAt = time.Now().UTC()
 					debtor.CallOutcome = string(mappedStatus)
 					debtor.CallAnswered = pickedUp
-					debtor.ContactAttempts++
-					
-					if pickedUp {
-						debtor.PickedUpCount++
-						debtor.SuccessfulContacts++
-					} else {
-						debtor.NotPickedUpCount++
-					}
+					debtor.IsCalled = true
 
 					if mappedStatus == entities.StatusConfirmed {
 						debtor.AcceptCount++
@@ -354,8 +350,12 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 					session.UpdatedAt = time.Now().UTC()
 					s.CallSessionService.UpdateCallSession(session.ID, session)
 
-					// Trigger session processor
-					s.triggerSessionProcessor(session.ID)
+					// Trigger session processor via process service
+					go func(sid string) {
+						if err := s.ProcessService.ProcessSession(sid); err != nil {
+							log.Errorf("ProcessSession error: %v", err)
+						}
+					}(session.ID)
 				}
 			}
 		}
@@ -458,10 +458,10 @@ Output format (STRICT JSON):
 }`
 
 	type aiRequest struct {
-		Model          string `json:"model"`
-		Messages       []map[string]string `json:"messages"`
+		Model          string                 `json:"model"`
+		Messages       []map[string]string    `json:"messages"`
 		ResponseFormat map[string]interface{} `json:"response_format"`
-		Temperature    float64 `json:"temperature"`
+		Temperature    float64                `json:"temperature"`
 	}
 
 	reqBody := aiRequest{
@@ -500,8 +500,8 @@ Output format (STRICT JSON):
 
 	if len(aiResponse.Choices) > 0 {
 		var content struct {
-			StatusName string  `json:"status_name"`
-			Reason     string  `json:"reason"`
+			StatusName string `json:"status_name"`
+			Reason     string `json:"reason"`
 		}
 		json.Unmarshal([]byte(aiResponse.Choices[0].Message.Content), &content)
 
@@ -549,10 +549,10 @@ Rules:
 Return STRICT JSON only: { "date_con": "YYYY-MM-DD" | null }`
 
 	type aiRequest struct {
-		Model          string `json:"model"`
-		Messages       []map[string]string `json:"messages"`
+		Model          string                 `json:"model"`
+		Messages       []map[string]string    `json:"messages"`
 		ResponseFormat map[string]interface{} `json:"response_format"`
-		Temperature    float64 `json:"temperature"`
+		Temperature    float64                `json:"temperature"`
 	}
 
 	reqBody := aiRequest{
@@ -597,27 +597,7 @@ Return STRICT JSON only: { "date_con": "YYYY-MM-DD" | null }`
 	return ""
 }
 
-func (s *webhookService) triggerSessionProcessor(sessionID string) {
-	supabaseURL := os.Getenv("SUPABASE_URL")
-	supabaseKey := os.Getenv("SUPABASE_SERVICE_ROLE_KEY")
-	if supabaseURL == "" || supabaseKey == "" {
-		return
-	}
-
-	url := fmt.Sprintf("%s/functions/v1/process-call-session", supabaseURL)
-	payload := map[string]string{"session_id": sessionID, "action": "continue"}
-	jsonPayload, _ := json.Marshal(payload)
-
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+supabaseKey)
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err == nil {
-		resp.Body.Close()
-	}
-}
+// triggerSessionProcessor removed: webhook now uses ICallProcessService.ProcessSession
 
 func (s *webhookService) toInt(v interface{}) int {
 	switch i := v.(type) {

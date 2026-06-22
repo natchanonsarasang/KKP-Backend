@@ -45,16 +45,15 @@ func main() {
 	callRecordsRepo := repo.NewCallRecordsRepository(mongodb)
 	workspacesRepo := repo.NewWorkspacesRepository(mongodb)
 
-
 	sv1 := sv.NewDebtorsService(debtorRepo)
 	sv2 := sv.NewCallListItemsService(callListItemRepo)
 	sv3 := sv.NewCallAttemptsService(callAttemptRepo, callListItemRepo)
 	sv4 := sv.NewCallSessionsService(callSessionRepo)
 	callRecordsSv := sv.NewCallRecordsService(callRecordsRepo)
 	sv6 := sv.NewWorkspacesService(workspacesRepo)
-	webhookSv := sv.NewWebhookService(callRecordsSv, sv1, sv2, sv3, sv4)
 	voicebotMakeCallSv := sv.NewVoicebotMakeCallService()
 	callProcessSv := sv.NewCallProcessService(callSessionRepo, callListItemRepo, debtorRepo, callRecordsRepo, callAttemptRepo)
+	webhookSv := sv.NewWebhookService(callRecordsSv, sv1, sv2, sv3, sv4, callProcessSv)
 
 	gw.NewHTTPGateway(app, sv6, callRecordsSv, sv1, sv2, sv3, sv4, webhookSv, voicebotMakeCallSv, callProcessSv)
 

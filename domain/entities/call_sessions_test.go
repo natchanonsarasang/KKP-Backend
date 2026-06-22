@@ -13,24 +13,24 @@ func TestCallSessionDataModel(t *testing.T) {
 	startedAt := now.Add(time.Minute)
 	completedAt := now.Add(10 * time.Minute)
 	errMsg := "some error occurred"
-	var settings interface{} = map[string]interface{}{"retry_count": float64(3)}
+	settings := CallSessionSettings(map[string]interface{}{"retry_count": float64(3)})
 
 	session := CallSessionDataModel{
 		ID:             "session-uuid-123",
-		UserID:          "usr-1",
-		WorkspaceID:     "ws-1",
+		UserID:         "usr-1",
+		WorkspaceID:    "ws-1",
 		Status:         "running",
 		TotalCalls:     10,
 		CompletedCalls: 5,
 		FailedCalls:    2,
 		ConfirmedCalls: 3,
 		TokenUsed:      150,
-		Settings:       &settings,
+		Settings:       settings,
 		ErrorMessage:   &errMsg,
 		StartedAt:      &startedAt,
 		CompletedAt:    &completedAt,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 
 	// Test JSON Marshalling
@@ -55,7 +55,7 @@ func TestCallSessionDataModel(t *testing.T) {
 	assert.Equal(t, session.TokenUsed, unmarshaled.TokenUsed)
 
 	assert.NotNil(t, unmarshaled.Settings)
-	settingsMap, ok := (*unmarshaled.Settings).(map[string]interface{})
+	settingsMap, ok := unmarshaled.Settings.(map[string]interface{})
 	assert.True(t, ok)
 	assert.Equal(t, float64(3), settingsMap["retry_count"])
 

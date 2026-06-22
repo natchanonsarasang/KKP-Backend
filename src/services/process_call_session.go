@@ -142,6 +142,9 @@ func (sv *callProcessService) PauseSession(sessionID string) error {
 }
 
 func (sv *callProcessService) StopSession(sessionID string) error {
+}
+
+func isWithinBusinessHours(settings entities.CallSessionSettings) bool {
 	now := time.Now().UTC()
 	return sv.CallSessionsRepository.UpdateCallSession(sessionID, entities.CallSessionDataModel{
 		Status:       "stopped",
@@ -403,6 +406,7 @@ func (sv *callProcessService) placeCall(
 			LastResponse:       mockOutcome,
 			CallOutcome:        string(mockStatus),
 			CallAnswered:       pickedUp,
+			IsCalled:           true,
 		}
 		if pickedUp {
 			stats.PickedUpCount = debtor.PickedUpCount + 1
@@ -504,18 +508,8 @@ func (sv *callProcessService) placeCall(
 		LastResponse:       debtor.LastResponse,
 		CallOutcome:        debtor.CallOutcome,
 		CallAnswered:       debtor.CallAnswered,
+		IsCalled:           true,
 	})
-
-	return true
-}
-
-func isWithinBusinessHours(settings entities.CallSessionSettings) bool {
-	if settings.TestMode {
-		return true
-	}
-	if !settings.BusinessHoursOnly {
-		return true
-	}
 
 	now := time.Now().UTC()
 	local := now.Add(time.Duration(settings.TimezoneOffset) * time.Minute)

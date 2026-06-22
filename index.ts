@@ -899,14 +899,54 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
-
   try {
-    const { session_id, action } = await req.json();
-    console.log("Request:", { session_id, action });
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Allow GET /?id=...&template_id=... to query call_templates
+    if (req.method === "GET") {
+      const url = new URL(req.url);
+      const idParam = url.searchParams.get("id");
+      const templateIdParam = url.searchParams.get("template_id");
+
+      if (idParam || templateIdParam) {
+        let q = supabase.from("call_templates").select("*");
+
+        if (idParam) {
+          const ids = idParam.split(",").map((s) => s.trim()).filter(Boolean);
+          if (ids.length === 1) {
+            q = q.eq("id", ids[0]);
+          } else if (ids.length > 1) {
+            q = q.in("id", ids);
+          }
+        }
+        if (templateIdParam) {
+          const tIds = templateIdParam.split(",").map((s) => s.trim()).filter(Boolean);
+          if (tIds.length === 1) {
+            q = q.eq("template_id", tIds[0]);
+          } else if (tIds.length > 1) {
+            q = q.in("template_id", tIds);
+          }
+        }
+
+        const { data, error } = await q;
+        if (error) {
+          console.error("call_templates query error:", error);
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ data }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    const { session_id, action } = await req.json();
+    console.log("Request:", { session_id, action });
 
     if (action === "pause") {
       // Pause the session
