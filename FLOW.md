@@ -141,9 +141,7 @@ Within a specific workspace, data is stored and created according to these cardi
     *   A new row is created every single time an API request is successfully dispatched to Botnoi Voicebot (generating a unique `botnoi_call_id`).
     *   If a debtor is called 3 times (the initial call + 2 retries), there will be **1** `CallListItem` row, but **3** separate `CallRecord` rows (and 3 corresponding `CallAttempt` rows documenting conversation details, durations, and audio URLs).
 
----
-
-## 3. End-to-End Flow Diagram
+## 3. End-to-End Flow Diagram (Go-Only Architecture)
 
 ```mermaid
 sequenceDiagram
@@ -151,160 +149,155 @@ sequenceDiagram
     participant FE as Frontend<br/>CallList.tsx
     participant GoAPI as Go API<br/>(callecto-api)
     participant MongoDB as MongoDB
-    participant SBFunc as Edge Function<br/>process-call-session
-    participant SupaDB as Supabase DB
     participant Botnoi as Botnoi Voicebot API
-    participant Webhook as Webhook Handler
 
     Note over User, FE: Phase 1: Queue Debtors
     User->>FE: Click "Queue All Debtors"
-    FE->>GoAPI: POST /call-list-items (for each debtor)
+    FE->>GoAPI: POST /api/v1/call-list-items (for each debtor)
     GoAPI->>MongoDB: Insert CallListItem (status: "pending")
 
-    Note over User, FE: Phase 2: Create Session
+    Note over User, FE: Phase 2: Create Session & Process
     User->>FE: Click "Start Calling"
-    FE->>FE: Validate business hours, auth, pending items
-    FE->>GoAPI: POST /call-sessions {id, workspace_id, status: "running", settings}
-    GoAPI->>MongoDB: Insert CallSession
-
-    Note over FE, SBFunc: Phase 3: Start Processing
-    FE->>SBFunc: POST /functions/v1/process-call-session<br/>{session_id, action: "start"}
-    SBFunc->>SupaDB: Fetch session (verify status=running)
-    SBFunc->>SBFunc: Check business hours
-    SBFunc->>SupaDB: Count items with status="calling"
-    SBFunc->>SBFunc: Calculate availableSlots = maxConcurrent - activeCallingCount
-
-    Note over SBFunc, Botnoi: Phase 4: Concurrent Calls
-    SBFunc->>SupaDB: Fetch pending items (LIMIT availableSlots)
-    SBFunc->>SupaDB: Batch update items → status="calling"
-    par Call 1
-        SBFunc->>Botnoi: POST call_message_public (phone_1)
-        SBFunc->>SupaDB: Insert CallRecord + CallAttempt
-    and Call 2
-        SBFunc->>Botnoi: POST call_message_public (phone_2)
-        SBFunc->>SupaDB: Insert CallRecord + CallAttempt
-    and Call N
-        SBFunc->>Botnoi: POST call_message_public (phone_N)
-        SBFunc->>SupaDB: Insert CallRecord + CallAttempt
+    FE->>GoAPI: POST /api/v1/call-sessions {status: "running", settings}
+    GoAPI->>MongoDB: Insert CallSession (status: "running")
+    FE->>GoAPI: POST /api/v1/call-process {session_id, action: "start"}
+    
+    Note over GoAPI, MongoDB: Phase 3: Slot Calculation & Allocation
+    GoAPI->>GoAPI: Acquire Workspace Lock (Mutex)
+    GoAPI->>MongoDB: Fetch running CallSession settings
+    GoAPI->>MongoDB: Fetch items where status = "calling"
+    GoAPI->>GoAPI: Reset stale calling items (>5m) to "failed"
+    GoAPI->>GoAPI: availableSlots = maxConcurrent - activeCallingCount
+    
+    Note over GoAPI, Botnoi: Phase 4: Auto-Dialing / Dispatch
+    GoAPI->>MongoDB: Fetch pending list items (LIMIT availableSlots)
+    alt Queue is Dry & Auto-Calling Enabled
+        GoAPI->>MongoDB: Find uncalled debtors (attempts=0, not in call_list_items)
+        GoAPI->>MongoDB: Auto-insert new CallListItem (status: "calling")
     end
-
-    Note over Botnoi, Webhook: Phase 5: Call Completes → Webhook
-    Botnoi-->>Webhook: POST /webhooks/botnoi {outbound_id, status, conversation_log, ...}
-    Webhook->>MongoDB: Update CallRecord status
-    Webhook->>MongoDB: Update CallListItem status + outcome
-    Webhook->>MongoDB: Update CallAttempt with result
-    Webhook->>MongoDB: Update Debtor stats
-    Webhook->>MongoDB: Update CallSession counters (completed/failed)
-    Webhook->>SBFunc: POST process-call-session {session_id, action: "continue"}
-
-    Note over SBFunc: Phase 6: Continue Loop
-    SBFunc->>SupaDB: Check slots available, fetch next batch
-    SBFunc->>Botnoi: Fire next concurrent calls
-    Note over SBFunc: Repeats until no pending items remain
-
-    Note over FE: Phase 7: Frontend Polling
-    loop Every 2 seconds
-        FE->>GoAPI: GET /call-sessions?workspace_id=X&user_id=Y
-        GoAPI-->>FE: {status, completed_calls, failed_calls, ...}
-        FE->>FE: Update progress bar + stats
+    
+    par Concurrent Calls
+        GoAPI->>MongoDB: Update CallListItem -> status="calling", called_at=now
+        GoAPI->>MongoDB: Create CallRecord (status="pending")
+        GoAPI->>MongoDB: Create CallAttempt (status="calling")
+        GoAPI->>MongoDB: Update Debtor stats (contact_attempts++)
+        GoAPI->>Botnoi: POST call_message_public (Outbound Call)
     end
-
-    Note over SBFunc: Phase 8: Session Complete
-    SBFunc->>SupaDB: Update session → status="completed", completed_at=now
+    
+    Note over Botnoi, GoAPI: Phase 5: Webhook Callback & Continuation
+    Botnoi->>GoAPI: POST /api/v1/webhooks/botnoi {outbound_id, status, ...}
+    GoAPI->>MongoDB: Update CallRecord status (final outcome)
+    GoAPI->>MongoDB: Update CallListItem status (success/failed)
+    GoAPI->>MongoDB: Update CallAttempt (transcript, duration)
+    GoAPI->>MongoDB: Update Debtor counters (picked_up, response type)
+    GoAPI->>MongoDB: Update CallSession progress counters
+    GoAPI->>GoAPI: Trigger ProcessSession(sessionID) in goroutine
+    GoAPI->>MongoDB: Recalculate slots & dispatch next concurrent batch
 ```
 
 ---
 
-## 4. Step-by-Step Workflow
+## 4. Step-by-Step Workflow & Database Mutations
 
-### Phase 1: Queue Debtors into Call List
+Here is the exact step-by-step description of how data is created, read, and updated in MongoDB by the Go backend services.
 
-The user queues debtors (from the Debtors list) as pending call items:
+### Phase 1: Database Operations Triggered by Frontend Actions
 
-| Step | Actor | Action | API Call |
-|------|-------|--------|---------|
-| 1 | User | Clicks "Queue All Debtors" | — |
-| 2 | Frontend | Filters debtors not yet in queue | — |
-| 3 | Frontend | Creates CallListItem per debtor | `POST /api/v1/call-list-items` × N (concurrently via `Promise.all`) |
+When the user queues debtors and starts the campaign, the frontend creates the baseline records:
 
-Each `CallListItem` is created with `status: "pending"` and linked to a `debtor_id`.
+1.  **Queue Debtor (Manual)**:
+    *   **Action**: Clicking "Queue All Debtors" in the frontend.
+    *   **Database Write**: Inserts a new document in **`call_list_items`** for each queued debtor:
+        *   `id`: new UUID
+        *   `workspace_id`: workspace ID
+        *   `debtor_id`: debtor ID
+        *   `status`: `"pending"`
+        *   `retry_count`: `0`
+2.  **Create Campaign Session**:
+    *   **Action**: Clicking "Start Calling" in the frontend.
+    *   **Database Write**: Inserts a new document in **`call_sessions`**:
+        *   `id`: `sessionID` (UUID)
+        *   `status`: `"running"`
+        *   `total_calls`: number of items in the queue
+        *   `settings`: concurrency limits, business hours, retries
+        *   `started_at`: `time.Now().UTC()`
 
-### Phase 2: Create Call Session
+### Phase 2: Operations Triggered by the Call-Process Route (`POST /api/v1/call-process`)
 
-| Step | Actor | Action | Details |
-|------|-------|--------|---------|
-| 1 | User | Clicks "Start Calling" | — |
-| 2 | Frontend | Validates preconditions | Business hours, auth, pending items > 0 |
-| 3 | Frontend | Generates UUID for session | `crypto.randomUUID()` |
-| 4 | Frontend | Creates session record | `POST /api/v1/call-sessions` with settings |
-| 5 | Frontend | Triggers processing | `POST /functions/v1/process-call-session {action: "start"}` |
+Upon receiving a request with `action: "start"`, the HTTP Handler invokes `ICallProcessService.ProcessSession(...)`:
 
-```typescript
-// CallList.tsx — startCallingSession function
-const sessionId = crypto.randomUUID();
-await createCallSession({
-  id: sessionId,
-  workspace_id: currentWorkspace.id,
-  status: "running",
-  total_calls: pendingItems.length,
-  settings: settings as unknown as CallSessionSettings,
-});
-await processCallSession({ session_id: sessionId, action: "start" });
-```
+1.  **Calculate Slot Capacity**:
+    *   **Read**: Fetches the active `CallSession` to retrieve configured `settings.concurrentCalls` (default: 5).
+    *   **Read**: Counts the active calling items currently running in the workspace:
+        `SELECT count FROM call_list_items WHERE status = 'calling' AND workspace_id = X`
+    *   **Reset Stale Items**: If any item has been in `calling` status for longer than 5 minutes (stale threshold), the database is mutated:
+        *   **Update** `call_list_items` setting `status = 'failed'` and `call_outcome = 'Call timed out'`.
+        *   **Update** `call_attempts` setting `status = 'failed'` and details to `"Stale timeout"`.
+    *   **Arithmetic**: Available slots are calculated as:
+        $$\text{availableSlots} = \text{maxConcurrent} - \text{activeCallingCount}$$
+        *(If $\text{availableSlots} \le 0$, the service exits immediately to wait for webhooks).*
+2.  **Load Targets**:
+    *   **Read**: Queries the database for pending queue items:
+        `SELECT FROM call_list_items WHERE status = 'pending' LIMIT availableSlots`
+3.  **Prepare Batch & Mutate Database**:
+    For each target item selected in the batch:
+    *   **Update** `call_list_items` to set:
+        *   `status`: `"calling"`
+        *   `called_at`: `time.Now().UTC()`
+        *   `call_outcome`: `"Call initiated - awaiting response"`
+    *   **Write** a new document in **`call_records`**:
+        *   `id`: new UUID (`call_record_id`)
+        *   `phone_number`: debtor phone number
+        *   `botnoi_call_id`: `"outbound_" + item.ID`
+        *   `status`: `"pending"`
+    *   **Update** the `call_list_items` record:
+        *   `call_record_id`: links the generated `call_record_id` back onto the item.
+    *   **Write** a new document in **`call_attempts`**:
+        *   `call_list_item_id`, `call_record_id`: relationships
+        *   `attempt_number`: `item.retry_count + 1`
+        *   `status`: `"calling"`
+        *   `call_outcome`: `"Call initiated - awaiting response"`
+    *   **Update** `debtors` stats:
+        *   `contact_attempts`: `debtor.contact_attempts + 1`
+        *   `last_contact_at`: `time.Now().UTC()`
+4.  **Dispatch API Calls**:
+    *   Invokes the Botnoi Outbound API concurrently for each debtor in the batch using goroutines.
 
-### Phase 3: Backend Processing (Supabase Edge Function)
+### Phase 3: Operations Triggered by the Webhook Callback (`POST /api/v1/webhooks/botnoi`)
 
-The `process-call-session` Edge Function runs the core loop:
+When Botnoi calls finish, the webhook handler updates the final transaction states:
 
-| Step | Action | Details |
-|------|--------|---------|
-| 1 | Fetch session | `SELECT * FROM call_sessions WHERE id = sessionId` |
-| 2 | Validate status | Stop if not `"running"` |
-| 3 | Check business hours | Pause session if outside configured hours |
-| 4 | Count active calls | `SELECT count FROM call_list_items WHERE status = 'calling'` |
-| 5 | Reset stale items | Any item in `"calling"` for > 5 minutes → set to `"failed"` |
-| 6 | Calculate slots | `availableSlots = maxConcurrent - activeCallingCount` |
-| 7 | Fetch pending items | `SELECT * FROM call_list_items WHERE status IN ('pending','retry_pending') LIMIT slots` |
-| 8 | Batch mark as calling | `UPDATE call_list_items SET status='calling' WHERE id IN (...)` |
-| 9 | Process concurrently | `await Promise.all(pendingItems.map(processItem))` |
-| 10 | Update session stats | Increment `completed_calls`, `failed_calls`, `token_used` |
-| 11 | Check for more items | If slots available and items remain → **recursive call** to self |
-| 12 | If no items remain | Set session `status: "completed"` |
+1.  **Update Call Logs**:
+    *   **Update** **`call_records`**: Sets `status` (e.g. `completed`, `no_answer`, `confirmed`, `declined`), duration, and appointment date/time.
+    *   **Update** **`call_attempts`**: Sets `status` (`success` or `failed`), `call_outcome`, `conversation_log`, `audio_url`, and duration.
+2.  **Update Queue List Item**:
+    *   **Update** **`call_list_items`**: Sets final state (`success`/`failed`), `call_outcome`, `picked_up` flag, and raw conversation details inside `notes`.
+3.  **Update Debtor Counters**:
+    *   **Update** **`debtors`**: Increments `picked_up_count`/`not_picked_up_count` and response counts (`accept_count`/`reject_count` based on confirmed/declined outcomes).
+4.  **Update Session Progress**:
+    *   **Update** **`call_sessions`**: Increments `completed_calls` or `failed_calls`, and updates `confirmed_calls`.
+5.  **Trigger Next Batch**:
+    *   Directly calls `go s.CallProcessService.ProcessSession(sessionID)` to fill slots.
 
-### Phase 4: Per-Item Call Processing (`processItem`)
+### Phase 4: Database Mutations for "AUTO" Calling Uncalled Debtors
 
-For each item in the concurrent batch:
+If the workspace queue in `call_list_items` is dry, but auto-calling is enabled, the backend populates calling slots automatically:
 
-| Step | Action |
-|------|--------|
-| 1 | Resolve debtor from `debtorMap` |
-| 2 | Skip if debtor is blocked |
-| 3 | Resolve template (or use default) |
-| 4 | Prepare voicebot variables (Thai date, policy number phonetics) |
-| 5 | POST to Botnoi Voicebot API with call payload |
-| 6 | On success: create `CallRecord` (status: `"pending"`) |
-| 7 | Update `CallListItem` with `call_record_id` |
-| 8 | Create `CallAttempt` (status: `"calling"`) |
-| 9 | Increment debtor `contact_attempts` |
-| 10 | On failure: update item to `status: "failed"` |
-
-### Phase 5: Webhook Callback
-
-When Botnoi completes a call, it sends a webhook:
-
-| Step | Actor | Action |
-|------|-------|--------|
-| 1 | Botnoi | POST to webhook endpoint with call result |
-| 2 | Webhook | Map status to internal taxonomy (confirmed/declined/no_answer/etc.) |
-| 3 | Webhook | AI categorize conversation log (via Gemini) |
-| 4 | Webhook | Update `CallRecord` with final status + result_data |
-| 5 | Webhook | Update matching `CallListItem` status + outcome |
-| 6 | Webhook | Update matching `CallAttempt` with conversation_log, audio_url |
-| 7 | Webhook | Update `Debtor` stats (contact_attempts, picked_up_count, etc.) |
-| 8 | Webhook | Update `CallSession` counters (completed_calls, failed_calls, confirmed_calls) |
-| 9 | Webhook | **Trigger `process-call-session` with `action: "continue"`** |
-
-> **This is the key re-entry point**: The webhook triggers the Edge Function again to fill freed-up concurrency slots with the next batch of pending items.
+1.  **Retrieve Uncontacted Debtors**:
+    *   **Read**: Queries the `debtors` collection for records where:
+        *   `contact_attempts == 0` (or `last_contact_at` is null)
+        *   `id NOT IN` the existing `call_list_items` collection for this workspace.
+2.  **Auto-Queue Ingestion**:
+    *   **Write**: Automatically inserts a new record into **`call_list_items`** for each chosen debtor:
+        *   `id`: new UUID
+        *   `workspace_id`: workspace ID
+        *   `debtor_id`: debtor ID
+        *   `status`: `"calling"`
+        *   `called_at`: `time.Now().UTC()`
+        *   `retry_count`: `0`
+3.  **Instantiate Call Logs & Dispatch**:
+    *   Proceeds to write the `CallRecord` and `CallAttempt` (same as Phase 2, step 3).
+    *   Dispatches calls to Botnoi concurrently.
 
 ---
 
@@ -312,20 +305,26 @@ When Botnoi completes a call, it sends a webhook:
 
 ```mermaid
 flowchart TD
-    A["Session starts<br/>concurrentCalls = 5"] --> B["Count items WHERE status='calling'"]
-    B --> C{"activeCount < maxConcurrent?"}
-    C -- "Yes" --> D["availableSlots = max - active"]
-    C -- "No" --> E["Wait for webhook callback"]
-    D --> F["Fetch LIMIT(availableSlots) pending items"]
-    F --> G["Mark all as 'calling' (batch update)"]
-    G --> H["Promise.all → fire N calls simultaneously"]
-    H --> I["Each call → Botnoi API"]
-    I --> J["Botnoi processes call"]
-    J --> K["Webhook fires on completion"]
-    K --> L["Update records + session counters"]
-    L --> M["Trigger process-call-session (continue)"]
-    M --> B
-    E --> K
+    A["ProcessSession starts"] --> B["Acquire Workspace Mutex"]
+    B --> C["Count items WHERE status='calling'"]
+    C --> D{"activeCount < maxConcurrent?"}
+    D -- "Yes" --> E["availableSlots = max - active"]
+    D -- "No" --> F["Release Mutex & wait for webhooks"]
+    E --> G["Fetch LIMIT(availableSlots) pending items"]
+    G --> H{"Found items?"}
+    H -- "No" --> I["Are there uncalled debtors?<br/>(AUTO CALL ENABLED)"]
+    H -- "Yes" --> K["Mark items as 'calling' (called_at = now)"]
+    I -- "Yes" --> J["Auto-create CallListItems (status: calling)"]
+    I -- "No" --> L["Release Mutex & complete/wait"]
+    J --> K
+    K --> M["Create CallRecord (pending)<br/>& CallAttempt (calling)"]
+    M --> N["Release Mutex"]
+    N --> O["Concurrently make API calls to Botnoi"]
+    O --> P["Botnoi completes call"]
+    P --> Q["Webhook callback received"]
+    Q --> R["Update records & session counters"]
+    R --> S["Trigger ProcessSession asynchronously"]
+    S --> A
 ```
 
 ### Concurrency Rules
@@ -336,17 +335,17 @@ flowchart TD
 | Slot calculation | `maxConcurrent - activeCallingCount` | Queried from `call_list_items WHERE status='calling'` |
 | Stale timeout | 5 minutes | Items in `"calling"` with `called_at` older than 5 min are reset to `"failed"` |
 | Retry delay | 1 minute | Items with `status: "pending_retry"` wait for `next_retry_at` |
-| Parallelism mechanism | `Promise.all()` | All items in a batch are fired simultaneously |
+| Parallelism mechanism | `go func(...)` goroutines | Spawns separate threads with a `sync.WaitGroup` pool |
 
 ### How the "Conveyor Belt" Works
 
-1. **Session starts**: Edge Function picks up `N` items (where `N = concurrentCalls`), marks them as `"calling"`, fires all calls simultaneously.
-2. **Call completes**: Botnoi webhook updates the item status to a terminal state (`success`/`failed`).
-3. **Webhook triggers continue**: The webhook handler calls `POST /functions/v1/process-call-session {action: "continue"}`.
-4. **Next batch fires**: The Edge Function recalculates available slots and fills them with the next pending items.
-5. **Repeat** until no pending items remain, then mark session `"completed"`.
+1. **Session starts**: The caller triggers the `POST /api/v1/call-process` handler. It loads `N` items (where `N = availableSlots`), updates their database status to `"calling"`, and spawns concurrent goroutines to fire calls to Botnoi simultaneously.
+2. **Call completes**: Botnoi webhook calls the Go `/api/v1/webhooks/botnoi` callback endpoint. The webhook service processes conversation records and writes updates to `CallRecord`, `CallListItem`, `CallAttempt`, `Debtor`, and `CallSession` progress counters.
+3. **Internal continue re-trigger**: As soon as the webhook updates are saved, the handler fires an asynchronous execution of `CallProcessService.ProcessSession(...)` in a background goroutine.
+4. **Next batch fires**: The background thread recalculates the remaining available slots and instantly fills them with the next pending queue items or uncalled debtors.
+5. **Repeat**: This loops automatically until all queued list items and uncontacted debtors are processed, at which point the session status is marked `"completed"`.
 
-This creates a **self-sustaining loop** where the system maintains `maxConcurrent` active calls at all times until all items are processed.
+This creates a **self-sustaining loop** where the system maintains up to `maxConcurrent` active calls at all times in the background without needing any browser polling or frontend execution.
 
 ---
 
@@ -731,42 +730,40 @@ flowchart TD
         $$\text{availableSlots} = \text{maxConcurrent} - \text{activeCallingCount}$$
     *   The background worker will fetch pending `CallListItem` documents from MongoDB, mark them as `calling`, and call the Botnoi API concurrently using HTTP client connection pooling.
 3.  **Direct Service-to-Service Loop Re-trigger**
-    *   In the future architecture, instead of using the network webhook re-trigger (`s.triggerSessionProcessor` calling Supabase via HTTP), the webhook handler service layer directly invokes the session service layer's batch processing method.
+    *   In the future architecture, instead of using the network webhook re-trigger, the webhook handler service layer directly invokes the session service layer's batch processing method.
     *   This keeps the loop in-process inside the Fiber backend, eliminating external HTTP overhead, API gateways, and authorization token handshakes.
 4.  **State Management & Auth**
     *   Move authentication validation in `callecto-api` middleware from checking Supabase JWT tokens to standard stateless JWTs generated directly by `callecto-api` or a custom auth provider.
 
 ### Service Layer Integration & Code Reuse
 
-To achieve clean separation of concerns, satisfy the **Single Responsibility Principle (SRP)**, and prevent **circular dependencies** (e.g. session service needing webhook updates, and webhook service needing session processing), we will introduce a dedicated orchestration layer: **`CallSchedulerService`**.
+To achieve clean separation of concerns, satisfy the **Single Responsibility Principle (SRP)**, and prevent **circular dependencies**, we utilize the actual **`ICallProcessService`** (located in [process_call_session.go](file:///home/cellul4r/Documents/botnoi/callecto-api/src/services/process_call_session.go)):
 
 ```
-       [Webhook Handler]            [Session Handler]
-               │                            │
-               ▼                            ▼
-      [WebhookService]            [CallSessionsService]
-               │                            │
-               └─────────────┬──────────────┘
-                             │
-                             ▼
-                  [CallSchedulerService]
-                             │
-            ┌────────────────┼────────────────┐
-            ▼                ▼                ▼
-    [MongoDB Repos]   [BotnoiClient]   [Workspace Mutex]
+  [Webhook Callback Route]               [Start Session Route]
+             │                                     │
+             ▼                                     ▼
+     [WebhookService]                      [Session Controller]
+             │                                (HTTP Gateway)
+             │                                     │
+             │      ┌──────────────────────────────┤
+             │      │                              ▼
+             ▼      ▼                     [CallSessionsService]
+        [ICallProcessService]                  (CRUD only)
+                 │
+  ┌──────────────┼──────────────┐
+  ▼              ▼              ▼
+[MongoDB] [OutboundClient] [Workspace Mutex]
 ```
 
 1.  **Dependency Injection Flow**:
-    *   Both the **`WebhookService`** and the **`CallSessionsService`** depend on **`ICallSchedulerService`**.
-    *   `ICallSchedulerService` has no dependency on either of them; it only communicates with database repositories (`ICallListItemsRepository`, `IDebtorsRepository`, etc.) and the `BotnoiClient`.
+    *   **`CallSessionsService`** (in [call_sessions.go](file:///home/cellul4r/Documents/botnoi/callecto-api/src/services/call_sessions.go)) does **not** depend on or inject `ICallProcessService`. It is kept completely focused on simple database CRUD.
+    *   The **Session Controller/Gateway Handler** (in [process_call_session.go](file:///home/cellul4r/Documents/botnoi/callecto-api/src/gateways/process_call_session.go)) maps the route `POST /api/v1/call-process` and injects **`ICallProcessService`** (which dispatches calls).
+    *   **`WebhookService`** (in [webhook.go](file:///home/cellul4r/Documents/botnoi/callecto-api/src/services/webhook.go)) injects `ICallProcessService` to trigger continuation batches.
 2.  **Unification of Calling Logic**:
-    *   Both the **initial campaign start trigger** (invoked from the `CallSessionsService` start endpoint) and the **webhook completion trigger** (invoked from the `WebhookService` after updating call logs) reuse the exact same `FillAvailableSlots(...)` method inside `CallSchedulerService`.
+    *   Both the **initial campaign start trigger** (invoked via the existing HTTP route `POST /api/v1/call-process` with `{ "session_id": "uuid", "action": "start" }`) and the **webhook continuation trigger** (invoked from `ProcessWebhook` when a call completes) reuse the exact same `ProcessSession(sessionID)` method inside `ICallProcessService`.
     *   This guarantees that slot-capacity checking, uncalled-debtor selection, state transition, and API dispatch are encapsulated in a single, reusable worker class.
-3.  **Migration of `process-call-session` Endpoint**:
-    *   Currently, the frontend starts calling by triggering `POST /functions/v1/process-call-session` with `{ action: "start" }`.
-    *   In the Go-only architecture, the Go API will expose a new HTTP route `POST /api/v1/call-sessions/:id/process` (or similar).
-    *   The route handler will authenticate the caller, load the session metadata, and call `CallSchedulerService.FillAvailableSlots(ctx, workspaceID, sessionID)` to initiate the concurrency loop.
-    *   This eliminates the dependency on the Supabase Edge Function Deno runtime, standardizing the execution loop on `CallSchedulerService`.
+    *   **API Compatibility**: The existing Go handler for `POST /api/v1/call-process` accepts the exact same JSON payload structure as the legacy Supabase Edge function, meaning the frontend only needs to update its target URL and keep the request payload identical.
 
 ---
 
@@ -836,7 +833,7 @@ To eliminate this race condition in the Go API-only architecture, the following 
 
 ## 16. Webhook Auto-Calling Example (Go Code)
 
-Here is a conceptual implementation demonstrating the Clean Architecture structure: the **Webhook Service** handles webhook record updates and triggers the **Call Scheduler Service**, which owns the concurrent dialing logic.
+Here is a conceptual implementation demonstrating the Clean Architecture structure: the **Webhook Service** handles webhook record updates and triggers the **Call Process Service**, which owns the concurrent dialing logic.
 
 ```go
 package services
@@ -847,7 +844,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
+	"go-fiber-template/domain/entities"
+	"go-fiber-template/domain/repositories"
 )
 
 // =========================================================================
@@ -859,7 +857,7 @@ type webhookService struct {
 	DebtorService       IDebtorsService
 	CallListItemService ICallListItemsService
 	CallAttemptService  ICallAttemptsService
-	SchedulerService    ICallSchedulerService // Injected Scheduler Service
+	CallProcessService  ICallProcessService // Injected Call Process Service
 }
 
 func NewWebhookService(
@@ -867,18 +865,18 @@ func NewWebhookService(
 	debtors IDebtorsService,
 	items ICallListItemsService,
 	attempts ICallAttemptsService,
-	scheduler ICallSchedulerService,
+	process ICallProcessService,
 ) IWebhookService {
 	return &webhookService{
 		CallRecordsService:  callRecords,
 		DebtorService:       debtors,
 		CallListItemService: items,
 		CallAttemptService:  attempts,
-		SchedulerService:    scheduler,
+		CallProcessService:  process,
 	}
 }
 
-// ProcessWebhook handles callback, updates outcome stats, and calls the Scheduler
+// ProcessWebhook handles callback, updates outcome stats, and calls CallProcessService
 func (s *webhookService) ProcessWebhook(payload WebhookPayload) error {
 	// A. Update call details and debtor stats in MongoDB
 	err := s.updateDatabaseRecords(payload)
@@ -886,12 +884,10 @@ func (s *webhookService) ProcessWebhook(payload WebhookPayload) error {
 		return fmt.Errorf("failed to save webhook result: %w", err)
 	}
 
-	// B. Reuse Orchestration: Call the scheduler service asynchronously.
+	// B. Reuse ProcessSession: Call the callProcessService asynchronously.
 	// Running inside a goroutine returns an immediate 200 OK response to Botnoi.
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		_ = s.SchedulerService.FillAvailableSlots(ctx, payload.WorkspaceID, payload.SessionID)
+		_ = s.CallProcessService.ProcessSession(payload.SessionID)
 	}()
 
 	return nil
@@ -903,42 +899,47 @@ func (s *webhookService) updateDatabaseRecords(payload WebhookPayload) error {
 }
 
 // =========================================================================
-// 2. ORCHESTRATION SERVICE LAYER (call_scheduler.go)
+// 2. PROCESS CALL SESSION SERVICE LAYER (process_call_session.go)
 // =========================================================================
 
-type ICallSchedulerService interface {
-	FillAvailableSlots(ctx context.Context, workspaceID string, sessionID string) error
+type ICallProcessService interface {
+	ProcessSession(sessionID string) error
+	PauseSession(sessionID string) error
+	StopSession(sessionID string) error
 }
 
-type callSchedulerService struct {
-	CallSessionsRepository repositories.ICallSessionsRepository
-	DebtorsRepository      repositories.IDebtorsRepository
-	ItemsRepository        repositories.ICallListItemsRepository
-	RecordsRepository      repositories.ICallRecordsRepository
-	BotnoiClient           *BotnoiClient
-	locks                  map[string]*sync.Mutex
-	locksMu                sync.Mutex
+type callProcessService struct {
+	CallSessionsRepository  repositories.ICallSessionsRepository
+	CallListItemsRepository repositories.ICallListItemsRepository
+	DebtorsRepository       repositories.IDebtorsRepository
+	CallRecordsRepository   repositories.ICallRecordsRepository
+	CallAttemptsRepository  repositories.ICallAttemptsRepository
+	OutboundClient          client.IOutboundBotnoiClient
+	locks                   map[string]*sync.Mutex
+	locksMu                 sync.Mutex
 }
 
-func NewCallSchedulerService(
+func NewCallProcessService(
 	sessions repositories.ICallSessionsRepository,
-	debtors repositories.IDebtorsRepository,
 	items repositories.ICallListItemsRepository,
+	debtors repositories.IDebtorsRepository,
 	records repositories.ICallRecordsRepository,
-	client *BotnoiClient,
-) ICallSchedulerService {
-	return &callSchedulerService{
-		CallSessionsRepository: sessions,
-		DebtorsRepository:      debtors,
-		ItemsRepository:        items,
-		RecordsRepository:      records,
-		BotnoiClient:           client,
-		locks:                  make(map[string]*sync.Mutex),
+	attempts repositories.ICallAttemptsRepository,
+	client client.IOutboundBotnoiClient,
+) ICallProcessService {
+	return &callProcessService{
+		CallSessionsRepository:  sessions,
+		CallListItemsRepository: items,
+		DebtorsRepository:       debtors,
+		CallRecordsRepository:   records,
+		CallAttemptsRepository:  attempts,
+		OutboundClient:          client,
+		locks:                   make(map[string]*sync.Mutex),
 	}
 }
 
-// GetLock retrieves or creates a mutex for a specific workspace to serialize dialing checks
-func (sv *callSchedulerService) GetLock(workspaceID string) *sync.Mutex {
+// GetLock retrieves or creates a mutex for a specific workspace to serialize checks
+func (sv *callProcessService) GetLock(workspaceID string) *sync.Mutex {
 	sv.locksMu.Lock()
 	defer sv.locksMu.Unlock()
 
@@ -948,73 +949,15 @@ func (sv *callSchedulerService) GetLock(workspaceID string) *sync.Mutex {
 	return sv.locks[workspaceID]
 }
 
-// FillAvailableSlots computes available capacity and auto-dials uncalled debtors
-func (sv *callSchedulerService) FillAvailableSlots(ctx context.Context, workspaceID string, sessionID string) error {
-	// A. Acquire workspace-level lock to prevent duplicate calling race conditions
-	lock := sv.GetLock(workspaceID)
-	lock.Lock()
-	defer lock.Unlock()
-
-	// B. Retrieve session and verify it is running
+// ProcessSession computes slot capacity, handles retries, and triggers concurrent dialing
+func (sv *callProcessService) ProcessSession(sessionID string) error {
 	session, err := sv.CallSessionsRepository.FindByID(sessionID)
-	if err != nil || session == nil || session.Status != "running" {
+	if err != nil || session == nil {
+		return fmt.Errorf("session not found: %w", err)
+	}
+
+	if session.Status != "running" {
 		return nil // Session has been stopped or paused
-	}
-
-	// C. Calculate current slot capacity
-	activeCalls, err := sv.ItemsRepository.CountByStatus(workspaceID, "calling")
-	if err != nil {
-		return err
-	}
-
-	maxConcurrent := session.Settings.ConcurrentCalls
-	if activeCalls >= maxConcurrent {
-		return nil // Concurrency cap reached
-	}
-
-	slotsAvailable := maxConcurrent - activeCalls
-
-	// D. Find debtors with 0 attempts that aren't in call_list_items for this workspace
-	uncalledDebtors, err := sv.DebtorsRepository.FindUncalledAndReserve(ctx, workspaceID, slotsAvailable)
-	if err != nil || len(uncalledDebtors) == 0 {
-		return nil // No debtors left to call
-	}
-
-	// E. Spawn async goroutines to trigger Botnoi calls concurrently
-	for _, debtor := range uncalledDebtors {
-		go sv.initiateOutboundCall(ctx, workspaceID, sessionID, debtor)
-	}
-
-	return nil
-}
-
-func (sv *callSchedulerService) initiateOutboundCall(ctx context.Context, workspaceID string, sessionID string, debtor Debtor) {
-	itemID := uuid.NewString()
-	recordID := uuid.NewString()
-
-	// 1. Create CallListItem (status: calling)
-	_ = sv.ItemsRepository.Insert(entities.CallListItemModel{
-		ID:          itemID,
-		WorkspaceID: workspaceID,
-		DebtorID:    debtor.ID,
-		Status:      "calling",
-		CalledAt:    time.Now().UTC(),
-	})
-
-	// 2. Create CallRecord (status: pending)
-	_ = sv.RecordsRepository.Insert(entities.CallRecordDataModel{
-		ID:          recordID,
-		WorkspaceID: workspaceID,
-		PhoneNumber: debtor.PhoneNumber,
-		Status:      "pending",
-	})
-
-	// 3. Dispatch outbound call API request to Botnoi
-	botnoiCallID, err := sv.BotnoiClient.TriggerOutboundCall(ctx, debtor.PhoneNumber, debtor.Name)
-	if err != nil {
-		// Update item to failed if calling API fails
-		_ = sv.ItemsRepository.UpdateStatus(itemID, "failed")
-		return
 	}
 
 	// 4. Update with actual Botnoi call identifier
