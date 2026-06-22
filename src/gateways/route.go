@@ -67,6 +67,25 @@ func GatewayWorkspaces(gateway HTTPGateway, app *fiber.App) {
 	api.Delete("/:id", gateway.DeleteWorkspace)
 }
 
+func GatewayAuth(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/auth")
+
+	api.Post("/register", gateway.Register)
+	api.Post("/login", gateway.Login)
+	api.Post("/google", gateway.GoogleSignIn)
+}
+
+func GatewayUsers(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/users", middlewares.SetJWtHeaderHandler())
+
+	api.Get("/me", gateway.GetMe)
+	api.Post("/", gateway.CreateUser)
+	api.Get("/", gateway.GetUsers)
+	api.Get("/:id", gateway.GetUserByID)
+	api.Put("/:id", gateway.UpdateUser)
+	api.Delete("/:id", gateway.DeleteUser)
+}
+
 func GatewayWebhooks(gateway HTTPGateway, app *fiber.App) {
 	api := app.Group("/api/v1/webhooks")
 
