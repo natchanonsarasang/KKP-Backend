@@ -1,0 +1,2249 @@
+openapi: 3.1.0
+info:
+  title: Callecto API
+  description: |
+    API for Callecto, an automated debt collection campaign platform.
+    
+    ### Key Features:
+    - **Campaign Isolation**: Partitioned via workspaces.
+    - **Debtor Management**: Tracks debtor profiles, balance history, variables, and pickup stats.
+    - **Call Queuing**: Manage structured call list items within workspaces.
+    - **Outbound Execution**: Controls live outbound dialing sessions with schedule management.
+    - **Outcome Analytics**: Detailed call records and conversational log details.
+
+    ### Authentication
+    Most endpoints require Bearer JWT token authentication. Carry this token in the `Authorization` header.
+  version: 1.0.0
+  contact:
+    name: Callecto API Support
+    email: support@callecto.example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+tags:
+  - name: Workspaces
+    description: Partition operations, data tenancy, and management boundaries
+  - name: Debtors
+    description: Debtor record creation, parameters, variables, and stats tracking
+  - name: Call List Items
+    description: Scheduling and routing queues for campaigns
+  - name: Call Attempts
+    description: Tracking history, outcomes, logs, and recording URLs of individual calls
+  - name: Call Sessions
+    description: Campaign configurations, concurrent dials, schedule controls, and stats
+  - name: Call Records
+    description: General call ledger matching providers to system sessions
+  - name: Webhooks
+    description: Callback hooks for external providers like Botnoi Voicebot
+  - name: Voicebot
+    description: Live voicebot controls and manual dialing triggers
+  - name: Call Process
+    description: Async worker engine execution (pause, stop, start, continue)
+paths:
+  /api/v1/workspaces:
+    post:
+      summary: Create Workspace
+      description: Create a new workspace for campaign isolation.
+      operationId: createWorkspace
+      tags:
+        - Workspaces
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspaceDataModel'
+      responses:
+        '200':
+          description: Workspace created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Bad request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized JWT token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '422':
+          description: Malformed JSON body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    get:
+      summary: Get Workspaces
+      description: Get all workspaces accessible by the current authenticated user.
+      operationId: getWorkspaces
+      tags:
+        - Workspaces
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: name
+          in: query
+          description: Filter workspaces by name
+          required: false
+          schema:
+            type: string
+        - name: owner_id
+          in: query
+          description: Filter workspaces by owner ID
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of workspaces retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ResponseModel'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/WorkspaceDataModel'
+        '400':
+          description: Invalid filter criteria
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/workspaces/{id}:
+    get:
+      summary: Get Workspace by ID
+      description: Retrieve workspace metadata for a specific workspace ID.
+      operationId: getWorkspaceById
+      tags:
+        - Workspaces
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Workspace ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workspace details retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ResponseModel'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/WorkspaceDataModel'
+        '400':
+          description: Invalid ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden - Not workspace owner/member
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '404':
+          description: Workspace not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    put:
+      summary: Update Workspace
+      description: Update parameters (e.g. name) of an existing workspace.
+      operationId: updateWorkspace
+      tags:
+        - Workspaces
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Workspace ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspaceDataModel'
+      responses:
+        '200':
+          description: Workspace successfully updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Invalid ID or parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '422':
+          description: Invalid body payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    delete:
+      summary: Delete Workspace
+      description: Permanently remove a workspace and its corresponding campaign configurations.
+      operationId: deleteWorkspace
+      tags:
+        - Workspaces
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Workspace ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workspace deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Deletion request failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/debtors:
+    post:
+      summary: Create Debtor
+      description: Create a new debtor record linked to a specific workspace.
+      operationId: createDebtor
+      tags:
+        - Debtors
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DebtorModel'
+      responses:
+        '200':
+          description: Debtor created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Missing workspace_id or invalid payload details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden access to this workspace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '422':
+          description: Unparseable body payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/debtors/workspace/{workspace_id}:
+    get:
+      summary: Get Debtors by Workspace
+      description: Retrieve all debtor entries belonging to a given workspace.
+      operationId: getDebtorsByWorkspace
+      tags:
+        - Debtors
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workspace_id
+          in: path
+          description: Workspace ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of debtors retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ResponseModel'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/DebtorModel'
+        '400':
+          description: Invalid path parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden workspace access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/debtors/{id}:
+    get:
+      summary: Get Debtor by ID
+      description: Get comprehensive details of a single debtor. Requires `workspace_id` query param for authorization check.
+      operationId: getDebtorById
+      tags:
+        - Debtors
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Debtor ID
+          required: true
+          schema:
+            type: string
+        - name: workspace_id
+          in: query
+          description: Workspace ID containing this debtor
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Debtor details retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ResponseModel'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DebtorModel'
+        '400':
+          description: Missing query workspace_id or invalid path ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    put:
+      summary: Update Debtor
+      description: Update details of an existing debtor. Requires `workspace_id` query parameter.
+      operationId: updateDebtor
+      tags:
+        - Debtors
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Debtor ID
+          required: true
+          schema:
+            type: string
+        - name: workspace_id
+          in: query
+          description: Workspace ID containing this debtor
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DebtorModel'
+      responses:
+        '200':
+          description: Debtor updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Missing query parameter or update failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '422':
+          description: Unparseable body payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    delete:
+      summary: Delete Debtor
+      description: Delete a debtor record from a workspace. Requires `workspace_id` query parameter.
+      operationId: deleteDebtor
+      tags:
+        - Debtors
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Debtor ID
+          required: true
+          schema:
+            type: string
+        - name: workspace_id
+          in: query
+          description: Workspace ID containing this debtor
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Debtor deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Missing query param or delete failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/call-list-items:
+    post:
+      summary: Create Call List Item
+      description: Add/schedule a debtor inside a calling queue.
+      operationId: createCallListItem
+      tags:
+        - Call List Items
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallListItemModel'
+      responses:
+        '200':
+          description: Call list item created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Missing workspace_id or invalid payload parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '422':
+          description: Malformed JSON body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/call-list-items/workspace/{workspace_id}:
+    get:
+      summary: Get Call List Items by Workspace
+      description: Retrieve calling queues inside a workspace with dynamic date and status filtering.
+      operationId: getCallListItemsByWorkspace
+      tags:
+        - Call List Items
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workspace_id
+          in: path
+          description: Workspace ID
+          required: true
+          schema:
+            type: string
+        - name: called_at_gte
+          in: query
+          description: Filter calls made at or after this date (RFC3339 or YYYY-MM-DD format)
+          required: false
+          schema:
+            type: string
+        - name: statuses_in
+          in: query
+          description: Comma-separated list of statuses to include (e.g. pending,calling)
+          required: false
+          schema:
+            type: string
+        - name: statuses_not_in
+          in: query
+          description: Comma-separated list of statuses to exclude (e.g. completed,failed)
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of items retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ResponseModel'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CallListItemModel'
+        '400':
+          description: Invalid query or path parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden workspace access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/call-list-items/{id}:
+    get:
+      summary: Get Call List Item by ID
+      description: Retrieve a specific call list item details. Requires `workspace_id` query param.
+      operationId: getCallListItemById
+      tags:
+        - Call List Items
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Call List Item ID
+          required: true
+          schema:
+            type: string
+        - name: workspace_id
+          in: query
+          description: Workspace ID containing this call list item
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Call list item details retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ResponseModel'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CallListItemModel'
+        '400':
+          description: Missing query parameter or invalid ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    put:
+      summary: Update Call List Item
+      description: Update details of a call list item. Requires `workspace_id` in query.
+      operationId: updateCallListItem
+      tags:
+        - Call List Items
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Call List Item ID
+          required: true
+          schema:
+            type: string
+        - name: workspace_id
+          in: query
+          description: Workspace ID containing this call list item
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallListItemModel'
+      responses:
+        '200':
+          description: Call list item updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Missing query or invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '422':
+          description: Unparseable body payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    delete:
+      summary: Delete Call List Item
+      description: Remove a call list item. Requires `workspace_id` in query.
+      operationId: deleteCallListItem
+      tags:
+        - Call List Items
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Call List Item ID
+          required: true
+          schema:
+            type: string
+        - name: workspace_id
+          in: query
+          description: Workspace ID containing this call list item
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Call list item deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Missing query param or deletion failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/call-attempts:
+    post:
+      summary: Create Call Attempt
+      description: Create/log a new outbound call attempt record.
+      operationId: createCallAttempt
+      tags:
+        - Call Attempts
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallAttemptModel'
+      responses:
+        '200':
+          description: Attempt logged successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Missing workspace_id or invalid payload params
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '422':
+          description: Invalid JSON body format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    put:
+      summary: Update Multiple Call Attempts
+      description: Batch update parameters of multiple call attempts within a workspace.
+      operationId: updateMultipleCallAttempts
+      tags:
+        - Call Attempts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workspace_id
+          in: query
+          description: Workspace ID containing the attempts
+          required: true
+          schema:
+            type: string
+        - name: call_list_item_id
+          in: query
+          description: Filter attempts by specific Call List Item ID
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter attempts by status
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallAttemptModel'
+      responses:
+        '200':
+          description: Success response details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: success
+                  modified_count:
+                    type: integer
+                    example: 12
+        '400':
+          description: Missing query parameter or batch operation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '422':
+          description: Invalid body payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/call-attempts/workspace/{workspace_id}:
+    get:
+      summary: Get Call Attempts by Workspace
+      description: Retrieve logged call attempts for a workspace with query filters and limits.
+      operationId: getCallAttemptsByWorkspace
+      tags:
+        - Call Attempts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workspace_id
+          in: path
+          description: Workspace ID
+          required: true
+          schema:
+            type: string
+        - name: call_list_item_id
+          in: query
+          description: Filter attempts by specific Call List Item ID
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter attempts by status
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Max count of records to return
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of attempts retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ResponseModel'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CallAttemptModel'
+        '400':
+          description: Invalid path or query criteria
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden workspace access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/call-attempts/{id}:
+    get:
+      summary: Get Call Attempt by ID
+      description: Get specific attempt details by ID. Requires `workspace_id` in query.
+      operationId: getCallAttemptById
+      tags:
+        - Call Attempts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Call Attempt ID
+          required: true
+          schema:
+            type: string
+        - name: workspace_id
+          in: query
+          description: Workspace ID containing this call attempt
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Call attempt details retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ResponseModel'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CallAttemptModel'
+        '400':
+          description: Missing query parameter or invalid ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    put:
+      summary: Update Call Attempt
+      description: Update details of an existing attempt record. Requires `workspace_id` query parameter.
+      operationId: updateCallAttempt
+      tags:
+        - Call Attempts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Call Attempt ID
+          required: true
+          schema:
+            type: string
+        - name: workspace_id
+          in: query
+          description: Workspace ID containing this call attempt
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallAttemptModel'
+      responses:
+        '200':
+          description: Attempt updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Missing query or invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '422':
+          description: Unparseable body payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    delete:
+      summary: Delete Call Attempt
+      description: Delete a call attempt record. Requires `workspace_id` in query.
+      operationId: deleteCallAttempt
+      tags:
+        - Call Attempts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Call Attempt ID
+          required: true
+          schema:
+            type: string
+        - name: workspace_id
+          in: query
+          description: Workspace ID containing this call attempt
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Attempt deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Missing query param or deletion failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/call-sessions:
+    post:
+      summary: Create Call Session (Campaign Run)
+      description: Create/schedule a new calling campaign/session run.
+      operationId: createCallSession
+      tags:
+        - Call Sessions
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallSessionDataModel'
+      responses:
+        '200':
+          description: Calling session campaign created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Invalid campaign parameter settings or creation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '422':
+          description: Malformed JSON body payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    get:
+      summary: Get Call Sessions
+      description: Get active or archived calling sessions with filtering.
+      operationId: getCallSessions
+      tags:
+        - Call Sessions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter sessions by Status
+          required: false
+          schema:
+            type: string
+        - name: workspace_id
+          in: query
+          description: Filter sessions by Workspace ID
+          required: false
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          description: Filter sessions by User ID
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of call sessions retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ResponseModel'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CallSessionDataModel'
+        '400':
+          description: Invalid filter queries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/call-sessions/{id}:
+    get:
+      summary: Get Call Session by ID
+      description: Get campaign metadata details by ID.
+      operationId: getCallSessionById
+      tags:
+        - Call Sessions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Call Session ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Call session details retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ResponseModel'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CallSessionDataModel'
+        '400':
+          description: Invalid ID path parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden access to this session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    put:
+      summary: Update Call Session
+      description: Update parameters (concurrency, delays, days) of an existing campaign session.
+      operationId: updateCallSession
+      tags:
+        - Call Sessions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Call Session ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallSessionDataModel'
+      responses:
+        '200':
+          description: Campaign session updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Invalid parameter changes or update failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '422':
+          description: Unparseable body payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    delete:
+      summary: Delete Call Session
+      description: Permanently remove a call session history item.
+      operationId: deleteCallSession
+      tags:
+        - Call Sessions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Call Session ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Call session deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Deletion operation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/call-records:
+    post:
+      summary: Create Call Record
+      description: Insert a call log record mapping external call IDs to user workspaces.
+      operationId: createCallRecord
+      tags:
+        - Call Records
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallRecordDataModel'
+      responses:
+        '201':
+          description: Call record created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Insertion failure or invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '422':
+          description: Malformed payload format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    get:
+      summary: Get Call Records
+      description: Get logged call history records with workspace, user, and status filters.
+      operationId: getCallRecords
+      tags:
+        - Call Records
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter records by Status
+          required: false
+          schema:
+            type: string
+        - name: workspace_id
+          in: query
+          description: Filter records by Workspace ID
+          required: false
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          description: Filter records by User ID
+          required: false
+          schema:
+            type: string
+        - name: botnoi_call_id
+          in: query
+          description: Filter records by Botnoi Call ID
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of call records retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ResponseModel'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CallRecordDataModel'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '500':
+          description: Database read failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+
+  /api/v1/call-records/{id}:
+    get:
+      summary: Get Call Record by ID
+      description: Retrieve details for a single call record.
+      operationId: getCallRecordById
+      tags:
+        - Call Records
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Call Record ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Call record details retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ResponseModel'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CallRecordDataModel'
+        '400':
+          description: Invalid path parameter format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '403':
+          description: Forbidden access to this record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '404':
+          description: Record not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+    put:
+      summary: Update Call Record
+      description: Update details of an existing call record.
+      operationId: updateCallRecord
+      tags:
+        - Call Records
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Call Record ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallRecordDataModel'
+      responses:
+        '200':
+          description: Record successfully updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Invalid path parameter or update failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '422':
+          description: Unparseable body payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+    delete:
+      summary: Delete Call Record
+      description: Permanently remove a call record.
+      operationId: deleteCallRecord
+      tags:
+        - Call Records
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Call Record ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Record deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Deletion operation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/webhooks/botnoi:
+    post:
+      summary: Botnoi Callback Callback
+      description: Webhook endpoint invoked by Botnoi voicebot to post recordings, call durations, and conversational logs. Action/acknowledgement responses with "Success Create Outbound call" are automatically filtered/ignored with a 200 return code.
+      operationId: botnoiWebhookCallback
+      tags:
+        - Webhooks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookPayload'
+      responses:
+        '200':
+          description: Webhook payload parsed or safely ignored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Initiation acknowledgement ignored
+        '422':
+          description: Malformed callback payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '500':
+          description: Server database or routine execution failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+  /api/v1/voicebot/make-call:
+    post:
+      summary: Manual Voicebot Make Call Trigger
+      description: Initiate outbound voice calls to a single phone number using a predefined chatbot workflow, injecting variables manually.
+      operationId: manualMakeCallTrigger
+      tags:
+        - Voicebot
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoicebotMakeCallDataModel'
+      responses:
+        '200':
+          description: Manual call initiation triggered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: success
+        '400':
+          description: Provider rejected call routing or failed connection parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '401':
+          description: Unauthorized token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '422':
+          description: Malformed JSON body
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /api/v1/call-process:
+    post:
+      summary: Session Processing State Engine
+      description: Processes control states (start, continue, pause, stop) for a campaign call session.
+      operationId: processSessionControl
+      tags:
+        - Call Process
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - session_id
+                - action
+              properties:
+                session_id:
+                  type: string
+                  description: Target call session ID to control
+                action:
+                  type: string
+                  enum: [start, continue, pause, stop]
+                  description: Action to trigger on call session state machine
+      responses:
+        '200':
+          description: Processing control operation successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseModel'
+        '400':
+          description: Incompatible state transition or execution failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '401':
+          description: Unauthorized token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+        '422':
+          description: Malformed body details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseMessage'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Carry valid user authorization inside JWT header payload.
+
+  schemas:
+    ResponseMessage:
+      type: object
+      properties:
+        message:
+          type: string
+          example: error details
+
+    ResponseModel:
+      type: object
+      properties:
+        message:
+          type: string
+          example: success
+        data:
+          type: object
+          nullable: true
+        status:
+          type: integer
+          nullable: true
+
+    WorkspaceDataModel:
+      type: object
+      required:
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "f81d4fae-7dec-11d0-a765-00a0c91e6bf6"
+        name:
+          type: string
+          example: "Recoveries Workspace"
+        owner_id:
+          type: string
+          example: "usr_2287"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    DebtorModel:
+      type: object
+      required:
+        - phone_number
+        - name
+        - workspace_id
+      properties:
+        id:
+          type: string
+          example: "deb_772819"
+        phone_number:
+          type: string
+          example: "0812345678"
+        name:
+          type: string
+          example: "John"
+        last_name:
+          type: string
+          example: "Doe"
+        total_debt:
+          type: number
+          format: double
+          example: 15400.50
+        status:
+          type: string
+          enum: [active, paid, defaulted, negotiating, pending]
+          example: active
+        contact_attempts:
+          type: integer
+          example: 2
+        successful_contacts:
+          type: integer
+          example: 1
+        last_contact_at:
+          type: string
+          format: date-time
+        last_response:
+          type: string
+          example: "Will pay next monday"
+        next_follow_up:
+          type: string
+          format: date-time
+        notes:
+          type: string
+          example: "Call back after noon only."
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        auto_call_enabled:
+          type: boolean
+          example: true
+        due_date:
+          type: string
+          format: date-time
+        call_answered:
+          type: boolean
+          example: true
+        call_outcome:
+          type: string
+          example: "accept"
+        picked_up_count:
+          type: integer
+          example: 1
+        not_not_picked_up_count:
+          type: integer
+          description: Database representation matches JSON key "not_not_picked_up_count"
+          example: 1
+        accept_count:
+          type: integer
+          example: 1
+        reject_count:
+          type: integer
+          example: 0
+        other_count:
+          type: integer
+          example: 0
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            due_amount: "15,400.50 THB"
+            due_date: "2026-06-30"
+        user_id:
+          type: string
+          example: "usr_2287"
+        workspace_id:
+          type: string
+          example: "wsp_92831"
+        is_blocked:
+          type: boolean
+          example: false
+        date_con:
+          type: string
+          example: "2026-06-22"
+
+    CallListItemModel:
+      type: object
+      required:
+        - debtor_id
+        - workspace_id
+      properties:
+        id:
+          type: string
+          example: "cli_881928"
+        user_id:
+          type: string
+          example: "usr_2287"
+        debtor_id:
+          type: string
+          example: "deb_772819"
+        workspace_id:
+          type: string
+          example: "wsp_92831"
+        template_id:
+          type: string
+          example: "tpl_44928"
+        scheduled_at:
+          type: string
+          format: date-time
+        called_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [pending, completed, failed, calling]
+          example: pending
+        call_record_id:
+          type: string
+          example: "rec_992817"
+        call_outcome:
+          type: string
+          example: "accept"
+        picked_up:
+          type: boolean
+          example: true
+        ai_category:
+          type: string
+          example: "debt_negotiation"
+        next_retry_at:
+          type: string
+          format: date-time
+          nullable: true
+        retry_count:
+          type: integer
+          example: 0
+        notes:
+          type: string
+          example: "Busy tone initially"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CallAttemptModel:
+      type: object
+      required:
+        - call_list_item_id
+        - workspace_id
+      properties:
+        id:
+          type: string
+          example: "att_0019283"
+        user_id:
+          type: string
+          example: "usr_2287"
+        call_list_item_id:
+          type: string
+          example: "cli_881928"
+        call_record_id:
+          type: string
+          example: "rec_992817"
+        workspace_id:
+          type: string
+          example: "wsp_92831"
+        attempt_number:
+          type: integer
+          example: 1
+        status:
+          type: string
+          enum: [calling, finished]
+          example: finished
+        call_outcome:
+          type: string
+          example: "accept"
+        picked_up:
+          type: boolean
+          example: true
+        ai_category:
+          type: string
+          example: "debt_negotiation"
+        conversation_log:
+          type: string
+          example: "Bot: Hi, is this John? Debtor: Yes, it is."
+        audio_url:
+          type: string
+          format: uri
+          example: "https://audio.botnoi.ai/calls/rec_992817.mp3"
+        call_duration:
+          type: integer
+          example: 45
+        error_reason:
+          type: string
+          example: ""
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CallSessionSettings:
+      type: object
+      properties:
+        maxRetries:
+          type: integer
+          example: 3
+        delayBetweenCalls:
+          type: integer
+          description: In seconds
+          example: 10
+        concurrentCalls:
+          type: integer
+          example: 2
+        businessHoursOnly:
+          type: boolean
+          example: true
+        businessHoursStart:
+          type: string
+          example: "09:00"
+        businessHoursEnd:
+          type: string
+          example: "17:00"
+        businessDays:
+          type: array
+          items:
+            type: integer
+          example: [1, 2, 3, 4, 5]
+        testMode:
+          type: boolean
+          example: false
+        timezoneOffset:
+          type: integer
+          description: UTC offset in minutes
+          example: 420
+        interruptible:
+          type: boolean
+          example: true
+
+    CallSessionDataModel:
+      type: object
+      required:
+        - workspace_id
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a81d4fae-7dec-11d0-a765-00a0c91e6bf6"
+        user_id:
+          type: string
+          example: "usr_2287"
+        workspace_id:
+          type: string
+          example: "wsp_92831"
+        status:
+          type: string
+          enum: [pending, calling, completed, failed, paused, stopped]
+          example: pending
+        total_calls:
+          type: integer
+          example: 150
+        completed_calls:
+          type: integer
+          example: 20
+        failed_calls:
+          type: integer
+          example: 2
+        confirmed_calls:
+          type: integer
+          example: 12
+        token_used:
+          type: integer
+          example: 42300
+        settings:
+          $ref: '#/components/schemas/CallSessionSettings'
+        error_message:
+          type: string
+          nullable: true
+          example: null
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CallStatus:
+      type: string
+      enum:
+        - confirmed
+        - declined
+        - no_response
+        - no_answer
+        - hanged_up
+        - pending
+        - completed
+        - busy
+        - failed
+        - rejected
+        - voicemail
+        - calling
+        - not_convenient
+      example: pending
+
+    CallRecordDataModel:
+      type: object
+      required:
+        - phone_number
+        - workspace_id
+      properties:
+        id:
+          type: string
+          example: "rec_992817"
+        template_id:
+          type: string
+          nullable: true
+          example: "tpl_44928"
+        phone_number:
+          type: string
+          example: "0812345678"
+        appointment_date:
+          type: string
+          example: "2026-06-25"
+        appointment_time:
+          type: string
+          example: "14:30"
+        status:
+          $ref: '#/components/schemas/CallStatus'
+        botnoi_call_id:
+          type: string
+          example: "btn_call_774928"
+        result_data:
+          type: object
+          nullable: true
+          example: null
+        due_date:
+          type: string
+          format: date-time
+        amount:
+          type: number
+          format: double
+          example: 15400.50
+        user_id:
+          type: string
+          example: "usr_2287"
+        workspace_id:
+          type: string
+          example: "wsp_92831"
+        call_duration:
+          type: integer
+          example: 45
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WebhookPayload:
+      type: object
+      required:
+        - call_id
+        - status
+      properties:
+        outbound_id:
+          type: string
+          example: "btn_out_91283"
+        call_id:
+          type: string
+          example: "btn_call_774928"
+        status:
+          type: string
+          example: "completed"
+        action:
+          type: string
+          example: "hung_up"
+        conversation_log:
+          type: string
+          example: "Bot: Hi John... Debtor: Yes..."
+        audio_url:
+          type: string
+          format: uri
+          example: "https://audio.botnoi.ai/calls/rec_992817.mp3"
+        duration:
+          oneOf:
+            - type: string
+            - type: number
+          example: 45
+        call_duration:
+          oneOf:
+            - type: string
+            - type: number
+          example: 45
+        phone_number:
+          type: string
+          example: "0812345678"
+        appointment_date:
+          type: string
+          example: "2026-06-25"
+        appointment_time:
+          type: string
+          example: "14:30"
+        message:
+          type: string
+          example: "Success Create Outbound call"
+        last_amd_status:
+          type: string
+          example: "HUMAN"
+        error:
+          type: string
+          example: ""
+
+    VoicebotMakeCallDataModel:
+      type: object
+      required:
+        - phone_number
+      properties:
+        phone_number:
+          type: string
+          example: "0812345678"
+        variables:
+          type: object
+          additionalProperties: true
+          example:
+            name: "John"
+            due_amount: "15,400 THB"
+        interruptible:
+          type: boolean
+          example: true
+        next_intent:
+          type: string
+          example: "confirm_identity"
+        outbound_id:
+          type: string
+          example: "btn_out_91283"
+        event_id:
+          type: string
+          example: "evt_338472"

@@ -1,0 +1,22 @@
+# Callecto API
+> Automated campaign calling and debt collection orchestration API utilizing MongoDB and AI voicebots.
+
+## Entrypoint & Gateway Setup
+- [main.go](file:///home/cellul4r/Documents/botnoi/callecto-api/main.go): Setup Go Fiber app, load env vars, initialize databases, and register Gateway controllers.
+- [src/gateways/http.go](file:///home/cellul4r/Documents/botnoi/callecto-api/src/gateways/http.go): HTTP gateway router mappings.
+- [src/gateways/route.go](file:///home/cellul4r/Documents/botnoi/callecto-api/src/gateways/route.go): API routes configuration and handlers assignment.
+
+## Core Models & Database Entities
+- [domain/entities/workspaces.go](file:///home/cellul4r/Documents/botnoi/callecto-api/domain/entities/workspaces.go): Tenant Workspace schema.
+- [domain/entities/debtors.go](file:///home/cellul4r/Documents/botnoi/callecto-api/domain/entities/debtors.go): Debtor records and pickup analytics stats.
+- [domain/entities/call_list_items.go](file:///home/cellul4r/Documents/botnoi/callecto-api/domain/entities/call_list_items.go): Call scheduling queue entries.
+- [domain/entities/call_attempts.go](file:///home/cellul4r/Documents/botnoi/callecto-api/domain/entities/call_attempts.go): Output logging for dialer attempts.
+- [domain/entities/call_sessions.go](file:///home/cellul4r/Documents/botnoi/callecto-api/domain/entities/call_sessions.go): Calling campaigns and schedule run limits.
+- [domain/entities/call_records.go](file:///home/cellul4r/Documents/botnoi/callecto-api/domain/entities/call_records.go): General calls records matches.
+
+## Core Services
+- `src/services/call_process.go`: Asynchronous dialer runner routines.
+- `src/services/webhook.go`: Webhook processing logic handles call callbacks from Botnoi.
+
+## Interactive Open API Spec
+- [openapi.yaml](file:///home/cellul4r/Documents/botnoi/callecto-api/openapi.yaml): Full OpenAPI 3.1 contract specification.
