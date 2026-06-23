@@ -1,6 +1,26 @@
-/tmp/*
-.vscode
+# Local environment variables
+.env
 
+# Binaries and builds
+/main
+/main.exe
+/tmp_build
+/tmp/*
+*.exe
+*.test
+*.out
+
+# IDEs
+.vscode/
+.idea/
+
+# Package dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Skills configuration / cache
 skill/
 *.exe
 

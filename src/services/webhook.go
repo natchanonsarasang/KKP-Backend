@@ -57,6 +57,7 @@ type webhookService struct {
 	CallListItemService ICallListItemsService
 	CallAttemptService  ICallAttemptsService
 	CallSessionService  ICallSessionsService
+	CallProcessService  ICallProcessService
 }
 
 func NewWebhookService(
@@ -65,6 +66,7 @@ func NewWebhookService(
 	items ICallListItemsService,
 	attempts ICallAttemptsService,
 	sessions ICallSessionsService,
+	callProcess ICallProcessService,
 ) IWebhookService {
 	return &webhookService{
 		CallRecordsService:  callRecords,
@@ -72,6 +74,7 @@ func NewWebhookService(
 		CallListItemService: items,
 		CallAttemptService:  attempts,
 		CallSessionService:  sessions,
+		CallProcessService:  callProcess,
 	}
 }
 
@@ -354,8 +357,13 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 					session.UpdatedAt = time.Now().UTC()
 					s.CallSessionService.UpdateCallSession(session.ID, session)
 
-					// Trigger session processor
-					s.triggerSessionProcessor(session.ID)
+					// Trigger the next batch via the call-process service directly.
+					// Run in a goroutine so the webhook response is not blocked by
+					// the (potentially long-running, recursive) session processing.
+					sessionID := session.ID
+					go func() {
+						_ = s.CallProcessService.ProcessSession(sessionID)
+					}()
 				}
 			}
 		}
@@ -595,28 +603,6 @@ Return STRICT JSON only: { "date_con": "YYYY-MM-DD" | null }`
 	}
 
 	return ""
-}
-
-func (s *webhookService) triggerSessionProcessor(sessionID string) {
-	supabaseURL := os.Getenv("SUPABASE_URL")
-	supabaseKey := os.Getenv("SUPABASE_SERVICE_ROLE_KEY")
-	if supabaseURL == "" || supabaseKey == "" {
-		return
-	}
-
-	url := fmt.Sprintf("%s/functions/v1/process-call-session", supabaseURL)
-	payload := map[string]string{"session_id": sessionID, "action": "continue"}
-	jsonPayload, _ := json.Marshal(payload)
-
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+supabaseKey)
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err == nil {
-		resp.Body.Close()
-	}
 }
 
 func (s *webhookService) toInt(v interface{}) int {

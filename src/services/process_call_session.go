@@ -216,8 +216,26 @@ func (sv *callProcessService) ProcessSession(sessionID string) error {
 	if err != nil {
 		return err
 	}
+	// Normalize to an empty list (never nil) when nothing is pending, so the
+	// top-up logic below can still run and append to it.
+	if pendingItems == nil {
+		pendingItems = &[]entities.CallListItemModel{}
+	}
 
-	if pendingItems == nil || len(*pendingItems) == 0 {
+	// FindPendingBySlot is capped at availableSlots but may return fewer items.
+	// When AutoCall is enabled, top up any leftover slots with debtors that have
+	// never been contacted yet (last_contact_at is null) by creating a pending
+	// call_list_item for each and appending them to the back of pendingItems, so
+	// they pass through the normal flow below.
+	if session.Settings.AutoCall && len(*pendingItems) < availableSlots {
+		need := availableSlots - len(*pendingItems)
+		if newItems := sv.queueNeverContactedDebtors(session, need); len(newItems) > 0 {
+			combined := append(*pendingItems, newItems...)
+			pendingItems = &combined
+		}
+	}
+
+	if len(*pendingItems) == 0 {
 		waiting, _ := sv.CallListItemsRepository.CountWaitingRetry(session.WorkspaceID, session.UserID)
 		if waiting > 0 {
 			fiberlog.Infof("[Session %s] %d retries waiting, keep running.", sessionID, waiting)
@@ -323,6 +341,57 @@ func (sv *callProcessService) ProcessSession(sessionID string) error {
 	}
 
 	return nil
+}
+
+// queueNeverContactedDebtors finds up to `need` debtors that have never been
+// contacted (last_contact_at is null) and don't already have a pending
+// call_list_item, then creates a pending call_list_item for each — exactly as the
+// frontend does when a user queues a debtor — so they can pass through the normal
+// calling flow. It returns the newly created items.
+func (sv *callProcessService) queueNeverContactedDebtors(session *entities.CallSessionDataModel, need int) []entities.CallListItemModel {
+	if need <= 0 {
+		return nil
+	}
+
+	// Exclude debtors that already have a pending call_list_item so we never
+	// queue the same debtor twice.
+	var excludeIDs []string
+	if pending, err := sv.CallListItemsRepository.FindByStatus(session.WorkspaceID, session.UserID, "pending"); err == nil && pending != nil {
+		for _, it := range *pending {
+			excludeIDs = append(excludeIDs, it.DebtorID)
+		}
+	}
+
+	debtors, err := sv.DebtorsRepository.FindNeverContacted(session.WorkspaceID, session.UserID, excludeIDs, need)
+	if err != nil || debtors == nil || len(*debtors) == 0 {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	newItems := make([]entities.CallListItemModel, 0, len(*debtors))
+	for _, d := range *debtors {
+		item := entities.CallListItemModel{
+			ID:          uuid.NewString(),
+			UserID:      session.UserID,
+			DebtorID:    d.ID,
+			WorkspaceID: session.WorkspaceID,
+			Status:      "pending",
+			RetryCount:  0,
+			ScheduledAt: now,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		if err := sv.CallListItemsRepository.Insert(item); err != nil {
+			fiberlog.Errorf("[Session %s] queueNeverContacted: insert item for debtor %s: %s", session.ID, d.ID, err)
+			continue
+		}
+		newItems = append(newItems, item)
+	}
+
+	if len(newItems) > 0 {
+		fiberlog.Infof("[Session %s] Queued %d never-contacted debtors to fill slots", session.ID, len(newItems))
+	}
+	return newItems
 }
 
 func (sv *callProcessService) markManyCalling(ids []string) {
