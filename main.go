@@ -44,6 +44,8 @@ func main() {
 	callSessionRepo := repo.NewCallSessionsRepository(mongodb)
 	callRecordsRepo := repo.NewCallRecordsRepository(mongodb)
 	workspacesRepo := repo.NewWorkspacesRepository(mongodb)
+	callTemplatesRepo := repo.NewCallTemplatesRepository(mongodb.Context, mongodb.MongoDB.Database(os.Getenv("MONGODB_NAME")))
+	callTokensRepo := repo.NewCallTokensRepository(mongodb.Context, mongodb.MongoDB.Database(os.Getenv("MONGODB_NAME")))
 
 	sv1 := sv.NewDebtorsService(debtorRepo)
 	sv2 := sv.NewCallListItemsService(callListItemRepo)
@@ -51,11 +53,13 @@ func main() {
 	sv4 := sv.NewCallSessionsService(callSessionRepo)
 	callRecordsSv := sv.NewCallRecordsService(callRecordsRepo)
 	sv6 := sv.NewWorkspacesService(workspacesRepo)
+	callTemplatesSv := sv.NewCallTemplatesService(callTemplatesRepo)
+	callTokensSv := sv.NewCallTokensService(callTokensRepo)
 	voicebotMakeCallSv := sv.NewVoicebotMakeCallService()
 	callProcessSv := sv.NewCallProcessService(callSessionRepo, callListItemRepo, debtorRepo, callRecordsRepo, callAttemptRepo)
 	webhookSv := sv.NewWebhookService(callRecordsSv, sv1, sv2, sv3, sv4, callProcessSv)
 
-	gw.NewHTTPGateway(app, sv6, callRecordsSv, sv1, sv2, sv3, sv4, webhookSv, voicebotMakeCallSv, callProcessSv)
+	gw.NewHTTPGateway(app, sv6, callRecordsSv, sv1, sv2, sv3, sv4, webhookSv, voicebotMakeCallSv, callProcessSv, callTemplatesSv, callTokensSv)
 
 	PORT := os.Getenv("PORT")
 

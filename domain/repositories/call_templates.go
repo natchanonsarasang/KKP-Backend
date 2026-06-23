@@ -2,7 +2,8 @@ package repositories
 
 import (
 	"context"
-	"go-fiber-template/domain/entities" // 👈 แก้ตรงนี้จาก callecto-api เป็น go-fiber-template
+	"go-fiber-template/domain/entities"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -10,6 +11,9 @@ import (
 
 type ICallTemplatesRepository interface {
 	FindByFilter(ctx context.Context, id string, templateID string) ([]*entities.CallTemplateDataModel, error)
+	InsertCallTemplate(ctx context.Context, data *entities.CallTemplateDataModel) error
+	UpdateCallTemplate(ctx context.Context, id string, data *entities.CallTemplateDataModel) error
+	DeleteCallTemplate(ctx context.Context, id string) error
 }
 
 type callTemplatesRepository struct {
@@ -46,4 +50,34 @@ func (r *callTemplatesRepository) FindByFilter(ctx context.Context, id string, t
 	}
 
 	return templates, nil
+}
+
+func (r *callTemplatesRepository) InsertCallTemplate(ctx context.Context, data *entities.CallTemplateDataModel) error {
+	_, err := r.Collection.InsertOne(ctx, data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *callTemplatesRepository) UpdateCallTemplate(ctx context.Context, id string, data *entities.CallTemplateDataModel) error {
+	filter := bson.M{"id": id}
+	if data.UpdatedAt.IsZero() {
+		data.UpdatedAt = time.Now().UTC()
+	}
+	update := bson.M{"$set": data}
+	_, err := r.Collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *callTemplatesRepository) DeleteCallTemplate(ctx context.Context, id string) error {
+	filter := bson.M{"id": id}
+	_, err := r.Collection.DeleteOne(ctx, filter)
+	if err != nil {
+		return err
+	}
+	return nil
 }
