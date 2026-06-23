@@ -14,7 +14,7 @@ services:
     name: callecto-api
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: starter            # free / starter / standard / pro ...
+    plan: free               # free / starter / standard / pro ...
     region: singapore        # closest to Asia/Bangkok
     branch: main
     autoDeploy: true
