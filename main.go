@@ -4,6 +4,7 @@ import (
 	"go-fiber-template/configuration"
 	ds "go-fiber-template/domain/datasources"
 	repo "go-fiber-template/domain/repositories"
+	"go-fiber-template/src/client"
 	gw "go-fiber-template/src/gateways"
 	"go-fiber-template/src/middlewares"
 	sv "go-fiber-template/src/services"
@@ -44,6 +45,7 @@ func main() {
 	callSessionRepo := repo.NewCallSessionsRepository(mongodb)
 	callRecordsRepo := repo.NewCallRecordsRepository(mongodb)
 	workspacesRepo := repo.NewWorkspacesRepository(mongodb)
+	usersRepo := repo.NewUsersRepository(mongodb)
 
 
 	sv1 := sv.NewDebtorsService(debtorRepo)
@@ -55,8 +57,11 @@ func main() {
 	voicebotMakeCallSv := sv.NewVoicebotMakeCallService()
 	callProcessSv := sv.NewCallProcessService(callSessionRepo, callListItemRepo, debtorRepo, callRecordsRepo, callAttemptRepo)
 	webhookSv := sv.NewWebhookService(callRecordsSv, sv1, sv2, sv3, sv4, callProcessSv)
+	googleOAuthClient := client.NewGoogleOAuthClient()
+	microsoftOAuthClient := client.NewMicrosoftOAuthClient()
+	usersSv := sv.NewUsersService(usersRepo, googleOAuthClient, microsoftOAuthClient)
 
-	gw.NewHTTPGateway(app, sv6, callRecordsSv, sv1, sv2, sv3, sv4, webhookSv, voicebotMakeCallSv, callProcessSv)
+	gw.NewHTTPGateway(app, sv6, callRecordsSv, sv1, sv2, sv3, sv4, webhookSv, voicebotMakeCallSv, callProcessSv, usersSv)
 
 	PORT := os.Getenv("PORT")
 

@@ -24,7 +24,7 @@ type DebtorModel struct {
 	CallAnswered       bool               `bson:"call_answer,omitempty" json:"call_answered"`
 	CallOutcome        string             `bson:"call_outcome,omitempty" json:"call_outcome"`
 	PickedUpCount      int                `bson:"picked_up_count,omitempty" json:"picked_up_count"`
-	NotPickedUpCount   int                `bson:"not_picked_up_count,omitempty" json:"not_not_picked_up_count"`
+	NotPickedUpCount   int                `bson:"not_picked_up_count,omitempty" json:"not_picked_up_count"`
 	AcceptCount        int                `bson:"accept_count,omitempty" json:"accept_count"`
 	RejectCount        int                `bson:"reject_count,omitempty" json:"reject_count"`
 	OtherCount         int                `bson:"other_count,omitempty" json:"other_count"`
