@@ -45,6 +45,7 @@ func NewHTTPGateway(
 		UsersService:            users,
 	}
 
+	GatewayHealth(*gateway, app)
 	GatewayAuth(*gateway, app)
 	GatewayUsers(*gateway, app)
 	GatewayWorkspaces(*gateway, app)

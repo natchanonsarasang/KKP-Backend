@@ -6,6 +6,13 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+func GatewayHealth(gateway HTTPGateway, app *fiber.App) {
+	// Liveness/health endpoint for platform health checks (e.g. Render).
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"status": "ok", "service": "callecto-api"})
+	})
+}
+
 func GatewayDebtors(gateway HTTPGateway, app *fiber.App) {
 	api := app.Group("/api/v1/debtors", middlewares.SetJWtHeaderHandler())
 
