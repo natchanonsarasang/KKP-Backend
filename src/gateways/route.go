@@ -127,3 +127,8 @@ func GatewayCallTokens(gateway HTTPGateway, app *fiber.App) {
 	api.Put("/:id", gateway.UpdateCallToken)
 	api.Delete("/:id", gateway.DeleteCallToken)
 }
+
+func GatewayAudioProxy(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/audio-proxy", middlewares.SetJWtHeaderHandler())
+	api.Get("/", gateway.AudioProxy)
+}
