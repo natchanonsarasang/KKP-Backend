@@ -19,6 +19,7 @@ type HTTPGateway struct {
 	UsersService            service.IUsersService
 	CallTemplatesService    service.ICallTemplatesService
 	CallTokensService       service.ICallTokensService
+	AudioProxyService       service.IAudioProxyService
 }
 
 func NewHTTPGateway(
@@ -35,6 +36,7 @@ func NewHTTPGateway(
 	users service.IUsersService,
 	callTemplates service.ICallTemplatesService,
 	callTokens service.ICallTokensService,
+	audioProxy service.IAudioProxyService,
 ) {
 	gateway := &HTTPGateway{
 		WorkspacesService:       workspaces,
@@ -49,6 +51,7 @@ func NewHTTPGateway(
 		UsersService:            users,
 		CallTemplatesService:    callTemplates,
 		CallTokensService:       callTokens,
+		AudioProxyService:       audioProxy,
 	}
 
 	GatewayHealth(*gateway, app)
@@ -65,4 +68,5 @@ func NewHTTPGateway(
 	GatewayWebhooks(*gateway, app)
 	GatewayVoicebotMakeCall(*gateway, app)
 	GatewayProcessCallSession(*gateway, app)
+	GatewayAudioProxy(*gateway, app)
 }
