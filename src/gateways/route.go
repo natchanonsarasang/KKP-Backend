@@ -6,6 +6,13 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+func GatewayHealth(gateway HTTPGateway, app *fiber.App) {
+	// Liveness/health endpoint for platform health checks (e.g. Render).
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"status": "ok", "service": "callecto-api"})
+	})
+}
+
 func GatewayDebtors(gateway HTTPGateway, app *fiber.App) {
 	api := app.Group("/api/v1/debtors", middlewares.SetJWtHeaderHandler())
 
@@ -65,6 +72,26 @@ func GatewayWorkspaces(gateway HTTPGateway, app *fiber.App) {
 	api.Get("/:id", gateway.GetWorkspaceByID)
 	api.Put("/:id", gateway.UpdateWorkspace)
 	api.Delete("/:id", gateway.DeleteWorkspace)
+}
+
+func GatewayAuth(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/auth")
+
+	api.Post("/register", gateway.Register)
+	api.Post("/login", gateway.Login)
+	api.Post("/google", gateway.GoogleSignIn)
+	api.Post("/microsoft", gateway.MicrosoftSignIn)
+}
+
+func GatewayUsers(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/users", middlewares.SetJWtHeaderHandler())
+
+	api.Get("/me", gateway.GetMe)
+	api.Post("/", gateway.CreateUser)
+	api.Get("/", gateway.GetUsers)
+	api.Get("/:id", gateway.GetUserByID)
+	api.Put("/:id", gateway.UpdateUser)
+	api.Delete("/:id", gateway.DeleteUser)
 }
 
 func GatewayWebhooks(gateway HTTPGateway, app *fiber.App) {

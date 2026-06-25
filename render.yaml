@@ -1,0 +1,61 @@
+# Render Blueprint for Callecto API
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Deploy:
+#   1. Push this file to your repo.
+#   2. In Render: New > Blueprint, point it at this repo.
+#   3. Fill in the values marked `sync: false` in the dashboard (secrets).
+#
+# The service builds from the existing Dockerfile and binds to the PORT that
+# Render injects (main.go reads os.Getenv("PORT")).
+
+services:
+  - type: web
+    name: callecto-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free               # free / starter / standard / pro ...
+    region: singapore        # closest to Asia/Bangkok
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /        # adjust if you have a dedicated health route
+    envVars:
+      # Render sets PORT automatically; the app falls back to 8080 locally.
+      - key: PORT
+        value: 8080
+
+      # --- MongoDB ---
+      - key: MONGODB_URI
+        sync: false           # set in dashboard (secret)
+      - key: MONGODB_NAME
+        value: callecto_db
+      - key: DATABASE_NAME    # legacy alias still read by some code paths
+        value: callecto_db
+
+      # --- Auth (Supabase JWKS preferred; HS256 fallback) ---
+      - key: SUPABASE_URL
+        sync: false
+      - key: JWK_SET_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: JWT_REFESH_SECRET_KEY
+        sync: false
+
+      # --- Outbound Voicebot ---
+      - key: OUTBOUND_URL
+        sync: false
+      - key: OUTBOUND_ACCESS_TOKEN
+        sync: false
+
+      # --- Microsoft Authentication ---
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_JWKS_URL
+        value: https://login.microsoftonline.com/common/discovery/v2.0/keys
+
+      # --- Google Authentication ---
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_TOKENINFO_URL
+        value: https://oauth2.googleapis.com/tokeninfo

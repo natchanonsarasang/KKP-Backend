@@ -18,6 +18,7 @@ type CallSessionSettings struct {
 	TestMode           bool   `json:"testMode" bson:"testMode,omitempty"`
 	TimezoneOffset     int    `json:"timezoneOffset" bson:"timezoneOffset,omitempty"`
 	Interruptible      bool   `json:"interruptible" bson:"interruptible,omitempty"`
+	AutoCall           bool   `json:"autoCall" bson:"autoCall,omitempty"`
 }
 
 // CallSessionDataModel represents a call campaign/session run in the database.

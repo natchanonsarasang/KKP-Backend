@@ -185,7 +185,7 @@ func (sv *callProcessService) ProcessSession(sessionID string) error {
 	now := time.Now()
 	var staleIDs []string
 	for _, item := range *callingItems {
-		if item.CalledAt.IsZero() || now.Sub(item.CalledAt) > staleThreshold {
+		if item.CalledAt == nil || item.CalledAt.IsZero() || now.Sub(*item.CalledAt) > staleThreshold {
 			staleIDs = append(staleIDs, item.ID)
 		}
 	}
@@ -219,8 +219,26 @@ func (sv *callProcessService) ProcessSession(sessionID string) error {
 	if err != nil {
 		return err
 	}
+	// Normalize to an empty list (never nil) when nothing is pending, so the
+	// top-up logic below can still run and append to it.
+	if pendingItems == nil {
+		pendingItems = &[]entities.CallListItemModel{}
+	}
 
-	if pendingItems == nil || len(*pendingItems) == 0 {
+	// FindPendingBySlot is capped at availableSlots but may return fewer items.
+	// When AutoCall is enabled, top up any leftover slots with debtors that have
+	// never been contacted yet (last_contact_at is null) by creating a pending
+	// call_list_item for each and appending them to the back of pendingItems, so
+	// they pass through the normal flow below.
+	if session.Settings.AutoCall && len(*pendingItems) < availableSlots {
+		need := availableSlots - len(*pendingItems)
+		if newItems := sv.queueNeverContactedDebtors(session, need); len(newItems) > 0 {
+			combined := append(*pendingItems, newItems...)
+			pendingItems = &combined
+		}
+	}
+
+	if len(*pendingItems) == 0 {
 		waiting, _ := sv.CallListItemsRepository.CountWaitingRetry(session.WorkspaceID, session.UserID)
 		if waiting > 0 {
 			fiberlog.Infof("[Session %s] %d retries waiting, keep running.", sessionID, waiting)
@@ -328,11 +346,63 @@ func (sv *callProcessService) ProcessSession(sessionID string) error {
 	return nil
 }
 
+// queueNeverContactedDebtors finds up to `need` debtors that have never been
+// contacted (last_contact_at is null) and don't already have a pending
+// call_list_item, then creates a pending call_list_item for each — exactly as the
+// frontend does when a user queues a debtor — so they can pass through the normal
+// calling flow. It returns the newly created items.
+func (sv *callProcessService) queueNeverContactedDebtors(session *entities.CallSessionDataModel, need int) []entities.CallListItemModel {
+	if need <= 0 {
+		return nil
+	}
+
+	// Exclude debtors that already have a pending call_list_item so we never
+	// queue the same debtor twice.
+	var excludeIDs []string
+	if pending, err := sv.CallListItemsRepository.FindByStatus(session.WorkspaceID, session.UserID, "pending"); err == nil && pending != nil {
+		for _, it := range *pending {
+			excludeIDs = append(excludeIDs, it.DebtorID)
+		}
+	}
+
+	debtors, err := sv.DebtorsRepository.FindNeverContacted(session.WorkspaceID, session.UserID, excludeIDs, need)
+	if err != nil || debtors == nil || len(*debtors) == 0 {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	newItems := make([]entities.CallListItemModel, 0, len(*debtors))
+	for _, d := range *debtors {
+		item := entities.CallListItemModel{
+			ID:          uuid.NewString(),
+			UserID:      session.UserID,
+			DebtorID:    d.ID,
+			WorkspaceID: session.WorkspaceID,
+			Status:      "pending",
+			RetryCount:  0,
+			ScheduledAt: &now,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		if err := sv.CallListItemsRepository.Insert(item); err != nil {
+			fiberlog.Errorf("[Session %s] queueNeverContacted: insert item for debtor %s: %s", session.ID, d.ID, err)
+			continue
+		}
+		newItems = append(newItems, item)
+	}
+
+	if len(newItems) > 0 {
+		fiberlog.Infof("[Session %s] Queued %d never-contacted debtors to fill slots", session.ID, len(newItems))
+	}
+	return newItems
+}
+
 func (sv *callProcessService) markManyCalling(ids []string) {
 	for _, id := range ids {
+		nowTime := time.Now().UTC()
 		sv.CallListItemsRepository.Update(id, entities.CallListItemModel{
 			Status:   "calling",
-			CalledAt: time.Now().UTC(),
+			CalledAt: &nowTime,
 		})
 	}
 }
@@ -394,6 +464,7 @@ func (sv *callProcessService) placeCall(
 		sv.CallListItemsRepository.UpdateManyStatus([]string{item.ID}, string(mockStatus), mockOutcome, pickedUp)
 
 		// Update debtor stats (start from existing values, then +1 by condition)
+		nowTime := time.Now().UTC()
 		stats := entities.DebtorStatsUpdate{
 			ContactAttempts:    debtor.ContactAttempts + 1,
 			SuccessfulContacts: debtor.SuccessfulContacts,
@@ -402,11 +473,10 @@ func (sv *callProcessService) placeCall(
 			AcceptCount:        debtor.AcceptCount,
 			RejectCount:        debtor.RejectCount,
 			OtherCount:         debtor.OtherCount,
-			LastContactAt:      time.Now().UTC(),
+			LastContactAt:      &nowTime,
 			LastResponse:       mockOutcome,
 			CallOutcome:        string(mockStatus),
-			CallAnswered:       pickedUp,
-			IsCalled:           true,
+			CallAnswered:       boolPtr(pickedUp),
 		}
 		if pickedUp {
 			stats.PickedUpCount = debtor.PickedUpCount + 1
@@ -474,10 +544,11 @@ func (sv *callProcessService) placeCall(
 	})
 
 	// Link call_record_id back onto the list item (keep status "calling" until webhook).
+	calledTime := time.Now().UTC()
 	sv.CallListItemsRepository.Update(item.ID, entities.CallListItemModel{
 		Status:       "calling",
 		CallOutcome:  "Call initiated - awaiting response",
-		CalledAt:     time.Now().UTC(),
+		CalledAt:     &calledTime,
 		CallRecordID: callRecordID,
 	})
 
@@ -492,10 +563,11 @@ func (sv *callProcessService) placeCall(
 		AttemptNumber:  attemptNumber,
 		Status:         "calling",
 		CallOutcome:    "Call initiated - awaiting response",
-		PickedUp:       false,
+		PickedUp:       boolPtr(false),
 	})
 
 	// Update debtor contact attempt count (real result comes later via webhook).
+	nowTimeUTC := time.Now().UTC()
 	sv.DebtorsRepository.UpdateStats(item.DebtorID, entities.DebtorStatsUpdate{
 		ContactAttempts:    debtor.ContactAttempts + 1,
 		SuccessfulContacts: debtor.SuccessfulContacts,
@@ -504,7 +576,7 @@ func (sv *callProcessService) placeCall(
 		AcceptCount:        debtor.AcceptCount,
 		RejectCount:        debtor.RejectCount,
 		OtherCount:         debtor.OtherCount,
-		LastContactAt:      time.Now().UTC(),
+		LastContactAt:      &nowTimeUTC,
 		LastResponse:       debtor.LastResponse,
 		CallOutcome:        debtor.CallOutcome,
 		CallAnswered:       debtor.CallAnswered,
@@ -541,6 +613,8 @@ func parseHHMM(s string, def int) int {
 }
 
 func strPtr(s string) *string { return &s }
+
+func boolPtr(b bool) *bool { return &b }
 
 func boolToStr(b bool) string {
 	if b {

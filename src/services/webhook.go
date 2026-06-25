@@ -57,7 +57,7 @@ type webhookService struct {
 	CallListItemService ICallListItemsService
 	CallAttemptService  ICallAttemptsService
 	CallSessionService  ICallSessionsService
-	ProcessService      ICallProcessService
+	CallProcessService  ICallProcessService
 }
 
 func NewWebhookService(
@@ -66,7 +66,7 @@ func NewWebhookService(
 	items ICallListItemsService,
 	attempts ICallAttemptsService,
 	sessions ICallSessionsService,
-	processSvc ICallProcessService,
+	callProcess ICallProcessService,
 ) IWebhookService {
 	return &webhookService{
 		CallRecordsService:  callRecords,
@@ -74,7 +74,7 @@ func NewWebhookService(
 		CallListItemService: items,
 		CallAttemptService:  attempts,
 		CallSessionService:  sessions,
-		ProcessService:      processSvc,
+		CallProcessService:  callProcess,
 	}
 }
 
@@ -242,7 +242,7 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 				if item.CallRecordID == callRecord.ID {
 					item.Status = finalStatus
 					item.CallOutcome = callOutcome
-					item.PickedUp = pickedUp
+					item.PickedUp = &pickedUp
 					item.AICategory = aiCategory
 					item.NextRetryAt = nil
 					notesObj := map[string]string{
@@ -263,7 +263,7 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 							if attempt.CallListItemID == item.ID && attempt.Status == "calling" {
 								attempt.Status = finalStatus
 								attempt.CallOutcome = callOutcome
-								attempt.PickedUp = pickedUp
+								attempt.PickedUp = &pickedUp
 								attempt.AiCategory = aiCategory
 								attempt.ConversationLog = conversationLog
 								attempt.AudioURL = audioURL
@@ -286,7 +286,7 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 							WorkspaceID:     resolvedWorkspaceID,
 							Status:          finalStatus,
 							CallOutcome:     callOutcome,
-							PickedUp:        pickedUp,
+							PickedUp:        &pickedUp,
 							AiCategory:      aiCategory,
 							ConversationLog: conversationLog,
 							AudioURL:        audioURL,
@@ -305,11 +305,19 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 		if debtors != nil {
 			for _, debtor := range *debtors {
 				if debtor.PhoneNumber == phoneNumber {
-					debtor.LastContactAt = time.Now().UTC()
-					debtor.UpdatedAt = time.Now().UTC()
+					nowTime := time.Now().UTC()
+					debtor.LastContactAt = &nowTime
+					debtor.UpdatedAt = nowTime
 					debtor.CallOutcome = string(mappedStatus)
-					debtor.CallAnswered = pickedUp
-					debtor.IsCalled = true
+					debtor.CallAnswered = &pickedUp
+					debtor.ContactAttempts++
+
+					if pickedUp {
+						debtor.PickedUpCount++
+						debtor.SuccessfulContacts++
+					} else {
+						debtor.NotPickedUpCount++
+					}
 
 					if mappedStatus == entities.StatusConfirmed {
 						debtor.AcceptCount++
@@ -350,12 +358,13 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 					session.UpdatedAt = time.Now().UTC()
 					s.CallSessionService.UpdateCallSession(session.ID, session)
 
-					// Trigger session processor via process service
-					go func(sid string) {
-						if err := s.ProcessService.ProcessSession(sid); err != nil {
-							log.Errorf("ProcessSession error: %v", err)
-						}
-					}(session.ID)
+					// Trigger the next batch via the call-process service directly.
+					// Run in a goroutine so the webhook response is not blocked by
+					// the (potentially long-running, recursive) session processing.
+					sessionID := session.ID
+					go func() {
+						_ = s.CallProcessService.ProcessSession(sessionID)
+					}()
 				}
 			}
 		}
@@ -597,7 +606,27 @@ Return STRICT JSON only: { "date_con": "YYYY-MM-DD" | null }`
 	return ""
 }
 
-// triggerSessionProcessor removed: webhook now uses ICallProcessService.ProcessSession
+func (s *webhookService) triggerSessionProcessor(sessionID string) {
+	supabaseURL := os.Getenv("SUPABASE_URL")
+	supabaseKey := os.Getenv("SUPABASE_SERVICE_ROLE_KEY")
+	if supabaseURL == "" || supabaseKey == "" {
+		return
+	}
+
+	url := fmt.Sprintf("%s/functions/v1/process-call-session", supabaseURL)
+	payload := map[string]string{"session_id": sessionID, "action": "continue"}
+	jsonPayload, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+supabaseKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err == nil {
+		resp.Body.Close()
+	}
+}
 
 func (s *webhookService) toInt(v interface{}) int {
 	switch i := v.(type) {
