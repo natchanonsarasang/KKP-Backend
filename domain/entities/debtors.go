@@ -21,7 +21,7 @@ type DebtorModel struct {
 	UpdatedAt          time.Time         `bson:"updated_at,omitempty" json:"updated_at"`
 	AutoCallEnabled    bool              `bson:"auto_call_enabled,omitempty" json:"auto_call_enabled"`
 	DueDate            *time.Time         `bson:"due_date,omitempty" json:"due_date"`
-	CallAnswered       bool              `bson:"call_answer,omitempty" json:"call_answered"`
+	CallAnswered       *bool              `bson:"call_answer,omitempty" json:"call_answered"`
 	CallOutcome        string            `bson:"call_outcome,omitempty" json:"call_outcome"`
 	PickedUpCount      int               `bson:"picked_up_count,omitempty" json:"picked_up_count"`
 	NotPickedUpCount   int               `bson:"not_picked_up_count,omitempty" json:"not_picked_up_count"`
@@ -46,5 +46,5 @@ type DebtorStatsUpdate struct {
 	LastContactAt      *time.Time `bson:"last_contact_at"`
 	LastResponse       string    `bson:"last_response"`
 	CallOutcome        string    `bson:"call_outcome"`
-	CallAnswered       bool      `bson:"call_answer"`
+	CallAnswered       *bool      `bson:"call_answer"`
 }

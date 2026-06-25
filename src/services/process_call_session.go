@@ -473,7 +473,7 @@ func (sv *callProcessService) placeCall(
 			LastContactAt:      &nowTime,
 			LastResponse:       mockOutcome,
 			CallOutcome:        string(mockStatus),
-			CallAnswered:       pickedUp,
+			CallAnswered:       boolPtr(pickedUp),
 		}
 		if pickedUp {
 			stats.PickedUpCount = debtor.PickedUpCount + 1
@@ -560,7 +560,7 @@ func (sv *callProcessService) placeCall(
 		AttemptNumber:  attemptNumber,
 		Status:         "calling",
 		CallOutcome:    "Call initiated - awaiting response",
-		PickedUp:       false,
+		PickedUp:       boolPtr(false),
 	})
 
 	// Update debtor contact attempt count (real result comes later via webhook).
@@ -620,6 +620,8 @@ func parseHHMM(s string, def int) int {
 }
 
 func strPtr(s string) *string { return &s }
+
+func boolPtr(b bool) *bool { return &b }
 
 func boolToStr(b bool) string {
 	if b {

@@ -242,7 +242,7 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 				if item.CallRecordID == callRecord.ID {
 					item.Status = finalStatus
 					item.CallOutcome = callOutcome
-					item.PickedUp = pickedUp
+					item.PickedUp = &pickedUp
 					item.AICategory = aiCategory
 					item.NextRetryAt = nil
 					notesObj := map[string]string{
@@ -263,7 +263,7 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 							if attempt.CallListItemID == item.ID && attempt.Status == "calling" {
 								attempt.Status = finalStatus
 								attempt.CallOutcome = callOutcome
-								attempt.PickedUp = pickedUp
+								attempt.PickedUp = &pickedUp
 								attempt.AiCategory = aiCategory
 								attempt.ConversationLog = conversationLog
 								attempt.AudioURL = audioURL
@@ -286,7 +286,7 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 							WorkspaceID:     resolvedWorkspaceID,
 							Status:          finalStatus,
 							CallOutcome:     callOutcome,
-							PickedUp:        pickedUp,
+							PickedUp:        &pickedUp,
 							AiCategory:      aiCategory,
 							ConversationLog: conversationLog,
 							AudioURL:        audioURL,
@@ -309,7 +309,7 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 					debtor.LastContactAt = &nowTime
 					debtor.UpdatedAt = nowTime
 					debtor.CallOutcome = string(mappedStatus)
-					debtor.CallAnswered = pickedUp
+					debtor.CallAnswered = &pickedUp
 					debtor.ContactAttempts++
 					
 					if pickedUp {
