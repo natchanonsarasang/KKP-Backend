@@ -182,7 +182,7 @@ func (sv *callProcessService) ProcessSession(sessionID string) error {
 	now := time.Now()
 	var staleIDs []string
 	for _, item := range *callingItems {
-		if item.CalledAt.IsZero() || now.Sub(item.CalledAt) > staleThreshold {
+		if item.CalledAt == nil || item.CalledAt.IsZero() || now.Sub(*item.CalledAt) > staleThreshold {
 			staleIDs = append(staleIDs, item.ID)
 		}
 	}
@@ -377,7 +377,7 @@ func (sv *callProcessService) queueNeverContactedDebtors(session *entities.CallS
 			WorkspaceID: session.WorkspaceID,
 			Status:      "pending",
 			RetryCount:  0,
-			ScheduledAt: now,
+			ScheduledAt: &now,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
@@ -396,9 +396,10 @@ func (sv *callProcessService) queueNeverContactedDebtors(session *entities.CallS
 
 func (sv *callProcessService) markManyCalling(ids []string) {
 	for _, id := range ids {
+		nowTime := time.Now().UTC()
 		sv.CallListItemsRepository.Update(id, entities.CallListItemModel{
 			Status:   "calling",
-			CalledAt: time.Now().UTC(),
+			CalledAt: &nowTime,
 		})
 	}
 }
@@ -540,10 +541,11 @@ func (sv *callProcessService) placeCall(
 	})
 
 	// Link call_record_id back onto the list item (keep status "calling" until webhook).
+	calledTime := time.Now().UTC()
 	sv.CallListItemsRepository.Update(item.ID, entities.CallListItemModel{
 		Status:       "calling",
 		CallOutcome:  "Call initiated - awaiting response",
-		CalledAt:     time.Now().UTC(),
+		CalledAt:     &calledTime,
 		CallRecordID: callRecordID,
 	})
 

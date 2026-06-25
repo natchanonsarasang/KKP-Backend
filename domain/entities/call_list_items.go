@@ -10,8 +10,8 @@ type CallListItemModel struct {
 	DebtorID     string             `bson:"debtor_id,omitempty" json:"debtor_id"`
 	WorkspaceID  string             `bson:"workspace_id,omitempty" json:"workspace_id"`
 	TemplateID   string             `bson:"template_id,omitempty" json:"template_id"`
-	ScheduledAt  time.Time          `bson:"scheduled_at,omitempty" json:"scheduled_at"`
-	CalledAt     time.Time          `bson:"called_at,omitempty" json:"called_at"`
+	ScheduledAt  *time.Time          `bson:"scheduled_at,omitempty" json:"scheduled_at"`
+	CalledAt     *time.Time          `bson:"called_at,omitempty" json:"called_at"`
 	Status       string             `bson:"status,omitempty" json:"status"` // pending/completed/failed/calling
 	CallRecordID string             `bson:"call_record_id,omitempty" json:"call_record_id"`
 	CallOutcome  string             `bson:"call_outcome,omitempty" json:"call_outcome"`

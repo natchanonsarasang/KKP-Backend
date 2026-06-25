@@ -24,7 +24,7 @@ func TestCallRecordDataModel(t *testing.T) {
 		Status:          StatusConfirmed,
 		BotnoiCallID:    "botnoi-call-xyz",
 		ResultData:      &resultData,
-		DueDate:         dueDate,
+		DueDate:         &dueDate,
 		Amount:          150.50,
 		UserID:          "usr-999",
 		WorkspaceID:     "ws-777",
@@ -59,7 +59,8 @@ func TestCallRecordDataModel(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "value", resultDataMap["key"])
 
-	assert.True(t, record.DueDate.Equal(unmarshaled.DueDate))
+	assert.NotNil(t, unmarshaled.DueDate)
+	assert.True(t, record.DueDate.Equal(*unmarshaled.DueDate))
 	assert.Equal(t, record.Amount, unmarshaled.Amount)
 	assert.Equal(t, record.UserID, unmarshaled.UserID)
 	assert.Equal(t, record.WorkspaceID, unmarshaled.WorkspaceID)
