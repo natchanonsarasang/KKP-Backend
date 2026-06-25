@@ -305,8 +305,9 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 		if debtors != nil {
 			for _, debtor := range *debtors {
 				if debtor.PhoneNumber == phoneNumber {
-					debtor.LastContactAt = time.Now().UTC()
-					debtor.UpdatedAt = time.Now().UTC()
+					nowTime := time.Now().UTC()
+					debtor.LastContactAt = &nowTime
+					debtor.UpdatedAt = nowTime
 					debtor.CallOutcome = string(mappedStatus)
 					debtor.CallAnswered = pickedUp
 					debtor.ContactAttempts++

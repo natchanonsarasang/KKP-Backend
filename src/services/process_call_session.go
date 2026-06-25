@@ -460,6 +460,7 @@ func (sv *callProcessService) placeCall(
 		sv.CallListItemsRepository.UpdateManyStatus([]string{item.ID}, string(mockStatus), mockOutcome, pickedUp)
 
 		// Update debtor stats (start from existing values, then +1 by condition)
+		nowTime := time.Now().UTC()
 		stats := entities.DebtorStatsUpdate{
 			ContactAttempts:    debtor.ContactAttempts + 1,
 			SuccessfulContacts: debtor.SuccessfulContacts,
@@ -468,7 +469,7 @@ func (sv *callProcessService) placeCall(
 			AcceptCount:        debtor.AcceptCount,
 			RejectCount:        debtor.RejectCount,
 			OtherCount:         debtor.OtherCount,
-			LastContactAt:      time.Now().UTC(),
+			LastContactAt:      &nowTime,
 			LastResponse:       mockOutcome,
 			CallOutcome:        string(mockStatus),
 			CallAnswered:       pickedUp,
@@ -561,6 +562,7 @@ func (sv *callProcessService) placeCall(
 	})
 
 	// Update debtor contact attempt count (real result comes later via webhook).
+	nowTimeUTC := time.Now().UTC()
 	sv.DebtorsRepository.UpdateStats(item.DebtorID, entities.DebtorStatsUpdate{
 		ContactAttempts:    debtor.ContactAttempts + 1,
 		SuccessfulContacts: debtor.SuccessfulContacts,
@@ -569,7 +571,7 @@ func (sv *callProcessService) placeCall(
 		AcceptCount:        debtor.AcceptCount,
 		RejectCount:        debtor.RejectCount,
 		OtherCount:         debtor.OtherCount,
-		LastContactAt:      time.Now().UTC(),
+		LastContactAt:      &nowTimeUTC,
 		LastResponse:       debtor.LastResponse,
 		CallOutcome:        debtor.CallOutcome,
 		CallAnswered:       debtor.CallAnswered,
