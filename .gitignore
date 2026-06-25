@@ -23,5 +23,3 @@ yarn-error.log*
 # Skills configuration / cache
 skill/
 *.exe
-
-.env
