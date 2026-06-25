@@ -59,7 +59,7 @@ func TestCallRecordsRepositoryCRUD(t *testing.T) {
 		Status:          entities.StatusPending,
 		BotnoiCallID:    "test-botnoi-id",
 		ResultData:      &resultData,
-		DueDate:         dueDate,
+		DueDate:         &dueDate,
 		Amount:          200.75,
 		UserID:          "test-user",
 		WorkspaceID:     "test-workspace",
@@ -78,6 +78,7 @@ func TestCallRecordsRepositoryCRUD(t *testing.T) {
 	assert.Equal(t, testID, found.ID)
 	assert.Equal(t, entities.StatusPending, found.Status)
 	assert.Equal(t, 200.75, found.Amount)
+	assert.NotNil(t, found.DueDate)
 	assert.True(t, found.DueDate.Equal(dueDate))
 	assert.NotNil(t, found.TemplateID)
 	assert.Equal(t, "test-tpl", *found.TemplateID)

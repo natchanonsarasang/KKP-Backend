@@ -34,9 +34,9 @@ type CallRecordDataModel struct {
 	AppointmentTime string        `json:"appointment_time" bson:"appointment_time,omitempty"`
 	Status          CallStatus    `json:"status" bson:"status,omitempty"`
 	BotnoiCallID    string        `json:"botnoi_call_id" bson:"botnoi_call_id,omitempty"`
-	ResultData      *interface{}  `json:"result_data" bson:"result_data,omitempty"`
-	DueDate         time.Time     `json:"due_date" bson:"due_date,omitempty"`
-	Amount          float64       `json:"amount" bson:"amount,omitempty"`
+	ResultData      *interface{}  `bson:"result_data,omitempty" json:"result_data"`
+	DueDate         *time.Time     `bson:"due_date,omitempty" json:"due_date"`
+	Amount          float64       `bson:"amount,omitempty" json:"amount"`
 	UserID          string        `json:"user_id" bson:"user_id,omitempty"`
 	WorkspaceID     string        `json:"workspace_id" bson:"workspace_id,omitempty"`
 	CallDuration    int           `json:"call_duration" bson:"call_duration,omitempty"`

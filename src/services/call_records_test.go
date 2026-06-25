@@ -91,6 +91,7 @@ func (m *mockCallRecordsRepository) DeleteCallRecordByUser(id string, userID str
 
 func TestCreateCallRecordValidation(t *testing.T) {
 	now := time.Now().UTC()
+	nowPtr := &now
 	templateID := "tpl-1"
 
 	tests := []struct {
@@ -104,7 +105,7 @@ func TestCreateCallRecordValidation(t *testing.T) {
 				return entities.CallRecordDataModel{
 					PhoneNumber:     "0909722021",
 					AppointmentDate: "2026-06-16",
-					DueDate:         now,
+					DueDate:         nowPtr,
 					UserID:          "user-1",
 					WorkspaceID:     "workspace-1",
 				}
@@ -117,7 +118,7 @@ func TestCreateCallRecordValidation(t *testing.T) {
 				return entities.CallRecordDataModel{
 					PhoneNumber:     "",
 					AppointmentDate: "2026-06-16",
-					DueDate:         now,
+					DueDate:         nowPtr,
 					UserID:          "user-1",
 					WorkspaceID:     "workspace-1",
 				}
@@ -130,7 +131,7 @@ func TestCreateCallRecordValidation(t *testing.T) {
 				return entities.CallRecordDataModel{
 					PhoneNumber:     "1909722021",
 					AppointmentDate: "2026-06-16",
-					DueDate:         now,
+					DueDate:         nowPtr,
 					UserID:          "user-1",
 					WorkspaceID:     "workspace-1",
 				}
@@ -143,7 +144,7 @@ func TestCreateCallRecordValidation(t *testing.T) {
 				return entities.CallRecordDataModel{
 					PhoneNumber:     "090972202",
 					AppointmentDate: "2026-06-16",
-					DueDate:         now,
+					DueDate:         nowPtr,
 					UserID:          "user-1",
 					WorkspaceID:     "workspace-1",
 				}
@@ -156,7 +157,7 @@ func TestCreateCallRecordValidation(t *testing.T) {
 				return entities.CallRecordDataModel{
 					PhoneNumber:     "09097220210",
 					AppointmentDate: "2026-06-16",
-					DueDate:         now,
+					DueDate:         nowPtr,
 					UserID:          "user-1",
 					WorkspaceID:     "workspace-1",
 				}
@@ -169,7 +170,7 @@ func TestCreateCallRecordValidation(t *testing.T) {
 				return entities.CallRecordDataModel{
 					PhoneNumber:     "0909722021",
 					AppointmentDate: "2026-06-16",
-					DueDate:         now,
+					DueDate:         nowPtr,
 					UserID:          "user-1",
 					WorkspaceID:     "workspace-1",
 					Amount:          -10.5,
@@ -183,7 +184,7 @@ func TestCreateCallRecordValidation(t *testing.T) {
 				return entities.CallRecordDataModel{
 					PhoneNumber:     "0909722021",
 					AppointmentDate: "16-06-2026",
-					DueDate:         now,
+					DueDate:         nowPtr,
 					UserID:          "user-1",
 					WorkspaceID:     "workspace-1",
 				}
@@ -196,7 +197,7 @@ func TestCreateCallRecordValidation(t *testing.T) {
 				return entities.CallRecordDataModel{
 					PhoneNumber:     "0909722021",
 					AppointmentDate: "2026-06-16",
-					DueDate:         time.Time{},
+					DueDate:         nil,
 					UserID:          "user-1",
 					WorkspaceID:     "workspace-1",
 				}
@@ -209,7 +210,7 @@ func TestCreateCallRecordValidation(t *testing.T) {
 				return entities.CallRecordDataModel{
 					PhoneNumber:     "0909722021",
 					AppointmentDate: "",
-					DueDate:         now,
+					DueDate:         nowPtr,
 					UserID:          "user-1",
 					WorkspaceID:     "workspace-1",
 				}
@@ -222,7 +223,7 @@ func TestCreateCallRecordValidation(t *testing.T) {
 				return entities.CallRecordDataModel{
 					PhoneNumber:     "0909722021",
 					AppointmentDate: "2026-06-16",
-					DueDate:         now,
+					DueDate:         nowPtr,
 					UserID:          "",
 					WorkspaceID:     "workspace-1",
 				}
@@ -235,7 +236,7 @@ func TestCreateCallRecordValidation(t *testing.T) {
 				return entities.CallRecordDataModel{
 					PhoneNumber:     "0909722021",
 					AppointmentDate: "2026-06-16",
-					DueDate:         now,
+					DueDate:         nowPtr,
 					UserID:          "user-1",
 					WorkspaceID:     "",
 				}
@@ -248,7 +249,7 @@ func TestCreateCallRecordValidation(t *testing.T) {
 				return entities.CallRecordDataModel{
 					PhoneNumber:     "0909722021",
 					AppointmentDate: "2026-06-16",
-					DueDate:         now,
+					DueDate:         nowPtr,
 					UserID:          "user-1",
 					WorkspaceID:     "workspace-1",
 					CallDuration:    -5,
@@ -286,12 +287,13 @@ func TestCreateCallRecordValidation(t *testing.T) {
 
 func TestCallRecordOwnershipValidation(t *testing.T) {
 	templateID := "tpl-123"
+	dueTime := time.Now()
 	existingRecord := &entities.CallRecordDataModel{
 		ID:              "rec-123",
 		UserID:          "owner-user",
 		PhoneNumber:     "0909722021",
 		AppointmentDate: "2026-06-16",
-		DueDate:         time.Now(),
+		DueDate:         &dueTime,
 		WorkspaceID:     "ws-123",
 		TemplateID:      &templateID,
 	}
