@@ -106,9 +106,24 @@ func GatewayVoicebotMakeCall(gateway HTTPGateway, app *fiber.App) {
 	api.Post("/", gateway.MakeCall)
 }
 
-
 func GatewayProcessCallSession(gateway HTTPGateway, app *fiber.App) {
 	api := app.Group("/api/v1/call-process", middlewares.SetJWtHeaderHandler())
 
 	api.Post("/", gateway.ProcessCallSession)
+}
+
+func GatewayCallTemplates(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/call-templates", middlewares.SetJWtHeaderHandler())
+	api.Post("/", gateway.CreateCallTemplate)
+	api.Get("/", gateway.GetCallTemplates)
+	api.Put("/:id", gateway.UpdateCallTemplate)
+	api.Delete("/:id", gateway.DeleteCallTemplate)
+}
+
+func GatewayCallTokens(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/call-tokens", middlewares.SetJWtHeaderHandler())
+	api.Post("/", gateway.CreateCallToken)
+	api.Get("/", gateway.GetTokens)
+	api.Put("/:id", gateway.UpdateCallToken)
+	api.Delete("/:id", gateway.DeleteCallToken)
 }
