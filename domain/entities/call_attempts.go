@@ -13,7 +13,7 @@ type CallAttemptModel struct {
 	AttemptNumber   int                `bson:"attempt_number,omitempty" json:"attempt_number"`
 	Status          string             `bson:"status,omitempty" json:"status"` // calling/finished
 	CallOutcome     string             `bson:"call_outcome,omitempty" json:"call_outcome"`
-	PickedUp        bool               `bson:"picked_up,omitempty" json:"picked_up"`
+	PickedUp        *bool               `bson:"picked_up,omitempty" json:"picked_up"`
 	AiCategory      string             `bson:"ai_category,omitempty" json:"ai_category"`
 	ConversationLog string             `bson:"conversation_log,omitempty" json:"conversation_log"`
 	AudioURL        string             `bson:"audio_url,omitempty" json:"audio_url"`

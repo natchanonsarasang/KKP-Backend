@@ -87,7 +87,7 @@ func main() {
 		WorkspaceID: workspaceID,
 		Status:      "pending",
 		RetryCount:  0,
-		ScheduledAt: now,
+		ScheduledAt: &now,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
