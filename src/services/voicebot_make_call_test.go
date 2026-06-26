@@ -76,7 +76,7 @@ func TestVoicebotMakeCallService_MakeCall(t *testing.T) {
 	assert.Equal(t, "0812345678", capturedPayload.PhoneNumber)
 	assert.Equal(t, "35250812345678", capturedPayload.SourcePhone)
 	assert.Equal(t, "212", capturedPayload.Speaker)
-	assert.Equal(t, float32(0.1), capturedPayload.ASRVadRules.FalseSilenceSec)
+	assert.Equal(t, "0.1", capturedPayload.FalseSilenceSec)
 	assert.Equal(t, "True", capturedPayload.Interruptible)
 
 	// Verify buildFlow content and Thai digits speech transformation for policy_no
