@@ -13,7 +13,4 @@ type WebhookPayload struct {
 	PhoneNumber      string      `json:"phone_number, omitempty"`
 	AppointmentDate  string      `json:"appointment_date, omitempty"`
 	AppointmentTime  string      `json:"appointment_time, omitempty"`
-	Message          string      `json:"message, omitempty"`
-	LastAMDStatus    string      `json:"last_amd_status, omitempty"`
-	Error            string      `json:"error, omitempty"`
 }

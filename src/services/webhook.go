@@ -156,8 +156,7 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 		}
 	}
 
-	amdHuman := strings.ToUpper(payload.LastAMDStatus) == "HUMAN"
-	pickedUp := hasUserSpoken || isSilence || amdHuman || s.contains([]string{string(entities.StatusConfirmed), string(entities.StatusDeclined), string(entities.StatusNoResponse), string(entities.StatusCompleted)}, string(mappedStatus))
+	pickedUp := hasUserSpoken || isSilence || s.contains([]string{string(entities.StatusConfirmed), string(entities.StatusDeclined), string(entities.StatusNoResponse), string(entities.StatusCompleted)}, string(mappedStatus))
 
 	var finalStatus string
 	if mappedStatus == entities.StatusHangedUp {
