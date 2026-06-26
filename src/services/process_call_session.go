@@ -193,6 +193,16 @@ func (sv *callProcessService) ProcessSession(sessionID string) error {
 		for _, sid := range staleIDs {
 			sv.CallAttemptsRepository.UpdateStatusByListItemID(sid, "calling", "failed", "Call timed out", false, "Stale timeout (5 min)")
 		}
+
+		// Stale items never got a webhook to bump these counters themselves
+		// (see webhook.go), so without this the session can never reach
+		// completed_calls + failed_calls == total_calls and the frontend's
+		// "Calls in Progress" banner gets stuck forever.
+		session.FailedCalls += len(staleIDs)
+		session.UpdatedAt = time.Now().UTC()
+		if err := sv.CallSessionsRepository.UpdateCallSession(sessionID, *session); err != nil {
+			fiberlog.Errorf("[Session %s] Failed to persist stale-item counter update: %s", sessionID, err)
+		}
 	}
 
 	activeCallingCount := len(*callingItems) - len(staleIDs)
