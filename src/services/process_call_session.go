@@ -529,10 +529,10 @@ func (sv *callProcessService) placeCall(
 		BotID:            botID,
 		ASRProvider:      asrProvider,
 		ASRLanguageCode:  "th",
-		ASRTimeout:       5,
+		/* ASRTimeout:       5,
 		FalseTimeoutSec:  "1",
 		FalseSilenceSec:  "0.1",
-		TrueSilenceSec:   "0.25",
+		TrueSilenceSec:   "0.25", */
 		Interruptible:    boolToStr(session.Settings.Interruptible),
 	}
 

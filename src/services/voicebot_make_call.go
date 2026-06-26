@@ -64,10 +64,10 @@ func (sv *voicebotMakeCallService) MakeCall(data entities.VoicebotMakeCallDataMo
 		BotID:            "6a06964fb875327d960f05f0",
 		ASRProvider:      "botnoi-aws-th-noise-classifier-v17c",
 		ASRLanguageCode:  "th",
-		ASRTimeout:       5,
+		/* ASRTimeout:       5,
 		FalseTimeoutSec:  "1",
 		FalseSilenceSec:  "0.1",
-		TrueSilenceSec:   "0.25",
+		TrueSilenceSec:   "0.25", */
 		Interruptible:    interruptible,
 	}
 
