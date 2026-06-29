@@ -3,10 +3,11 @@ package client
 import (
 	"errors"
 	"go-fiber-template/domain/entities"
-	"log"
 	"os"
+	"time"
 
 	"github.com/go-resty/resty/v2"
+	fiberlog "github.com/gofiber/fiber/v2/log"
 )
 
 type OutboundBotnoiClient struct {
@@ -28,25 +29,40 @@ func NewOutboundBotnoiClient(token string, host string, port string) IOutboundBo
 }
 
 func (c *OutboundBotnoiClient) MakeCall(payload entities.OutboundBotnoiDataModel) error {
-	// Implement the logic to make an outbound call using the Botnoi API
-	// You can use an HTTP client to send a request to the Botnoi API endpoint with the payload
-	log.Printf("Making call with payload: %+v\n", payload)
+	// outbound_id is the correlation key echoed back by the webhook, so it is the
+	// most useful field to key log lines on when tracing a single call.
+	tag := "[Outbound " + payload.OutboundID + "]"
 
+	if c.baseURL == "" {
+		fiberlog.Errorf("%s misconfigured: OUTBOUND_URL is empty", tag)
+		return errors.New("outbound call failed: OUTBOUND_URL is not set")
+	}
+	if c.accessToken == "" {
+		fiberlog.Warnf("%s OUTBOUND_ACCESS_TOKEN is empty — request will likely be rejected", tag)
+	}
+
+	fiberlog.Infof("%s placing call → phone=%s url=%s", tag, payload.PhoneNumber, c.baseURL)
+
+	start := time.Now()
 	resp, err := c.client.R().
 		SetHeader("Authorization", "Bearer "+c.accessToken).
 		SetHeader("Content-Type", "application/json").
 		SetBody(payload).
 		Post(c.baseURL)
+	elapsed := time.Since(start)
 
 	if err != nil {
-		log.Printf("Error making call: %v\n", err)
+		// Transport-level failure (DNS, timeout, connection refused, ...).
+		fiberlog.Errorf("%s request failed after %s: %v", tag, elapsed, err)
 		return err
 	}
 
 	if resp.IsError() {
-		log.Printf("Error response from Botnoi API: %s\n", resp.String())
-		return errors.New("error response from Botnoi API: " + resp.String())
+		// HTTP-level failure (non-2xx). Log status + body so the upstream reason is visible.
+		fiberlog.Errorf("%s HTTP %d after %s: %s", tag, resp.StatusCode(), elapsed, resp.String())
+		return errors.New("error response from Botnoi API (HTTP " + resp.Status() + "): " + resp.String())
 	}
 
+	fiberlog.Infof("%s success: HTTP %d in %s", tag, resp.StatusCode(), elapsed)
 	return nil
 }
