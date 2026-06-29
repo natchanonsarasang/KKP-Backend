@@ -8,6 +8,10 @@ import (
 )
 
 func (h *HTTPGateway) Webhook(ctx *fiber.Ctx) error {
+	// Log the raw inbound body first so we capture exactly what Botnoi sent,
+	// including any fields not mapped onto WebhookPayload.
+	log.Infof("[Webhook] inbound raw body: %s", string(ctx.Body()))
+
 	var payload entities.WebhookPayload
 	if err := ctx.BodyParser(&payload); err != nil {
 		log.Errorf("Webhook Error: Failed to parse body: %v", err)
