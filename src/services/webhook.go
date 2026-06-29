@@ -92,7 +92,7 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 
 	// Extract phone number from audio_url if missing (format: ..._PHONE.wav)
 	if phoneNumber == "" && audioURL != "" {
-		re := regexp.MustCompile(`_(\d+)\.wav$`)
+		re := regexp.MustCompile(`_(\d+)\.wav`)
 		match := re.FindStringSubmatch(audioURL)
 		if len(match) > 1 {
 			phoneNumber = match[1]
@@ -100,8 +100,21 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 	}
 
 	if callID == "" && phoneNumber == "" {
-		log.Warn("Webhook received with no identifiable data")
+		log.Warnf("[Webhook] received with no identifiable data (status=%q action=%q): %+v", status, action, payload)
 		return nil
+	}
+
+	// tag keys every log line for this webhook to the call it belongs to, so a
+	// single call can be traced end-to-end across the noisy webhook stream.
+	tag := fmt.Sprintf("[Webhook %s/%s]", callID, phoneNumber)
+	log.Infof("%s received: status=%q action=%q amd=%q audio=%t log=%t", tag, status, action, payload.LastAMDStatus, audioURL != "", conversationLog != "")
+
+	// Dump the full payload Botnoi sent us so the raw inbound data is always
+	// visible in the log for debugging.
+	if raw, err := json.Marshal(payload); err == nil {
+		log.Infof("%s payload: %s", tag, string(raw))
+	} else {
+		log.Infof("%s payload (struct): %+v", tag, payload)
 	}
 
 	// Check if user actually spoke
@@ -185,9 +198,12 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 		callOutcome = "Unknown"
 	}
 
+	log.Infof("%s classified: mappedStatus=%s finalStatus=%s pickedUp=%t outcome=%q", tag, mappedStatus, finalStatus, pickedUp, callOutcome)
+
 	// --- AI Categorization ---
 	aiResult := s.classifyCall(payload, conversationLog)
 	aiCategory := aiResult.Category
+	log.Infof("%s ai category=%q reason=%q", tag, aiCategory, aiResult.Reason)
 
 	// Resolve Owner (UserID, WorkspaceID)
 	var resolvedUserID, resolvedWorkspaceID string
@@ -195,7 +211,10 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 	// 1. Try from CallRecord
 	var callRecord *entities.CallRecordDataModel
 	if callID != "" {
-		records, _ := s.CallRecordsService.GetAllCallRecords(entities.CallRecordFilter{BotnoiCallID: callID})
+		records, err := s.CallRecordsService.GetAllCallRecords(entities.CallRecordFilter{BotnoiCallID: callID})
+		if err != nil {
+			log.Errorf("%s lookup call_record by id failed: %v", tag, err)
+		}
 		if records != nil && len(*records) > 0 {
 			callRecord = &(*records)[0]
 			resolvedUserID = callRecord.UserID
@@ -203,16 +222,27 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 			if phoneNumber == "" {
 				phoneNumber = callRecord.PhoneNumber
 			}
+		} else {
+			log.Warnf("%s no call_record matched call id %q", tag, callID)
 		}
 	}
 
 	// 2. Fallback: Try from Debtor (WorkspaceID resolve)
 	if resolvedWorkspaceID == "" && phoneNumber != "" {
-		debtor, _ := s.DebtorService.GetDebtorByPhoneNumber(phoneNumber)
+		debtor, err := s.DebtorService.GetDebtorByPhoneNumber(phoneNumber)
+		if err != nil {
+			log.Errorf("%s lookup debtor by phone failed: %v", tag, err)
+		}
 		if debtor != nil {
 			resolvedUserID = debtor.UserID
 			resolvedWorkspaceID = debtor.WorkspaceID
 		}
+	}
+
+	if resolvedWorkspaceID == "" {
+		log.Warnf("%s could not resolve owner (workspace/user) — stats and session advance will be skipped", tag)
+	} else {
+		log.Infof("%s resolved owner: workspace=%s user=%s", tag, resolvedWorkspaceID, resolvedUserID)
 	}
 
 	// Update Call Record and related entities
@@ -232,7 +262,11 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 		callRecord.AppointmentTime = payload.AppointmentTime
 		callRecord.UpdatedAt = time.Now().UTC()
 
-		s.CallRecordsService.UpdateCallRecord(callRecord.ID, *callRecord)
+		if err := s.CallRecordsService.UpdateCallRecord(callRecord.ID, *callRecord); err != nil {
+			log.Errorf("%s update call_record %s failed: %v", tag, callRecord.ID, err)
+		} else {
+			log.Infof("%s call_record %s updated: status=%s duration=%ds", tag, callRecord.ID, mappedStatus, duration)
+		}
 
 		// Update Call List Items
 		items, _ := s.CallListItemService.GetCallListItemsByWorkspace(callRecord.WorkspaceID)
@@ -355,20 +389,27 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 						session.FailedCalls++
 					}
 					session.UpdatedAt = time.Now().UTC()
-					s.CallSessionService.UpdateCallSession(session.ID, session)
+					if err := s.CallSessionService.UpdateCallSession(session.ID, session); err != nil {
+						log.Errorf("%s update session %s failed: %v", tag, session.ID, err)
+					} else {
+						log.Infof("%s session %s advanced: completed=%d confirmed=%d failed=%d", tag, session.ID, session.CompletedCalls, session.ConfirmedCalls, session.FailedCalls)
+					}
 
 					// Trigger the next batch via the call-process service directly.
 					// Run in a goroutine so the webhook response is not blocked by
 					// the (potentially long-running, recursive) session processing.
 					sessionID := session.ID
 					go func() {
-						_ = s.CallProcessService.ProcessSession(sessionID)
+						if err := s.CallProcessService.ProcessSession(sessionID); err != nil {
+							log.Errorf("%s ProcessSession %s failed: %v", tag, sessionID, err)
+						}
 					}()
 				}
 			}
 		}
 	}
 
+	log.Infof("%s done", tag)
 	return nil
 }
 
