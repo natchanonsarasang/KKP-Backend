@@ -56,7 +56,13 @@ func (repo *debtorsRepository) Insert(data entities.DebtorModel) error {
 }
 
 func (repo *debtorsRepository) FindAllByWorkspace(workspaceID string, userID string) (*[]entities.DebtorModel, error) {
-	filter := bson.M{"workspace_id": workspaceID, "user_id": userID}
+	// userID is empty for system/webhook lookups (workspace-wide). Only scope by
+	// user when a userID is actually provided, otherwise we'd filter on
+	// user_id == "" and match nothing.
+	filter := bson.M{"workspace_id": workspaceID}
+	if userID != "" {
+		filter["user_id"] = userID
+	}
 	var debtors []entities.DebtorModel
 	cursor, err := repo.Collection.Find(repo.Context, filter)
 	if err != nil {
