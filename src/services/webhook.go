@@ -269,10 +269,18 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 		}
 
 		// Update Call List Items
-		items, _ := s.CallListItemService.GetCallListItemsByWorkspace(callRecord.WorkspaceID)
+		items, itemsErr := s.CallListItemService.GetCallListItemsByWorkspace(callRecord.WorkspaceID)
+		itemCount := 0
+		if items != nil {
+			itemCount = len(*items)
+		}
+		log.Infof("%s [DEBUG-item] lookup workspace=%q err=%v count=%d targetCallRecordID=%q", tag, callRecord.WorkspaceID, itemsErr, itemCount, callRecord.ID)
+		matched := false
 		if items != nil {
 			for _, item := range *items {
+				log.Infof("%s [DEBUG-item] candidate item=%q status=%q call_record_id=%q match=%t", tag, item.ID, item.Status, item.CallRecordID, item.CallRecordID == callRecord.ID)
 				if item.CallRecordID == callRecord.ID {
+					matched = true
 					item.Status = finalStatus
 					item.CallOutcome = callOutcome
 					item.PickedUp = &pickedUp
@@ -285,7 +293,11 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 					notesJSON, _ := json.Marshal(notesObj)
 					item.Notes = string(notesJSON)
 					item.UpdatedAt = time.Now().UTC()
-					s.CallListItemService.UpdateCallListItem(item.ID, item)
+					if uerr := s.CallListItemService.UpdateCallListItem(item.ID, item); uerr != nil {
+						log.Errorf("%s [DEBUG-item] update item %s failed: %v", tag, item.ID, uerr)
+					} else {
+						log.Infof("%s [DEBUG-item] item %s updated -> status=%s outcome=%q", tag, item.ID, finalStatus, callOutcome)
+					}
 
 					// Update Call Attempt
 					attempts, _ := s.CallAttemptService.GetAttemptsByWorkspace(callRecord.WorkspaceID)
@@ -329,6 +341,9 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 					}
 				}
 			}
+		}
+		if !matched {
+			log.Warnf("%s [DEBUG-item] NO call_list_item matched call_record_id=%q among %d workspace items", tag, callRecord.ID, itemCount)
 		}
 	}
 
