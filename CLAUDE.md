@@ -108,3 +108,33 @@ prepare TTS variables — preserve their Thai output when editing.
 Tests live next to the code as `*_test.go` (testify). Repository/service tests rely on interface
 mocks rather than a live Mongo. When adding a service method, add it to the interface and update
 any mock implementing it or the package won't compile.
+
+---
+
+## 🧠 Active Agent Skills & Workflows
+
+### 1. Codebase Design (`codebase-design`)
+- **When**: Designing/improving module interfaces, separating concerns, deciding on seams, or refactoring.
+- **Rules**:
+  - Focus on **Deep Modules** (small interface hiding high implementation complexity). Avoid pass-through or shallow modules.
+  - Establish clear **Seams** (locations where interfaces live) to decouple modules. Do not add a seam unless there are at least two distinct implementations/adapters (avoid hypothetical abstraction).
+  - Test at the interface level (external seam). Do not write tests that bypass the interface.
+  - Accept dependencies (DI) instead of instantiating them inside the module. Return results rather than producing side-effects.
+
+### 2. Diagnosing Bugs (`diagnosing-bugs`)
+- **When**: Debugging errors, crashes, failing tests, or performance regressions.
+- **Rules**:
+  - **Phase 1: Build a Feedback Loop**: Do NOT read code or hypothesize before establishing a fast (<2s), deterministic, agent-runnable command (test, curl, script) that fails on this specific bug. If impossible, halt and request info.
+  - **Phase 2: Minimize**: Cut down inputs/config until only the absolute load-bearing elements of the failure remain.
+  - **Phase 3: Hypothesize**: Rank 3–5 falsifiable hypotheses (`"If X is the cause, then changing Y makes it disappear"`). Share with the user.
+  - **Phase 4: Instrument**: Target logs with prefix `[DEBUG-xxxx]` (remove them during final cleanup).
+  - **Phase 5: Fix & Regression Test**: Write a regression test at the correct seam *before* fixing, then verify both test and loop pass.
+  - **Phase 6: Cleanup & Post-Mortem**: Clean up all instrumentation, delete throwaways, and record the solution.
+
+### 3. Domain Modeling (`domain-modeling`)
+- **When**: Aligning on terms/glossary, resolving business domain logic, or writing ADRs.
+- **Rules**:
+  - Challenge ambiguous terms (e.g. "Customer" vs "User") and align with the `CONTEXT.md` glossary.
+  - Update `CONTEXT.md` immediately when new terms are resolved. Keep implementation details out of `CONTEXT.md`.
+  - Create ADRs (Architecture Decision Records) sparingly. Only write them if the decision is: (1) Hard to reverse, (2) Surprising without context, and (3) A trade-off with clear alternatives.
+
