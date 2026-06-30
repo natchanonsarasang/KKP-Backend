@@ -53,7 +53,13 @@ func (repo *callListItemsRepository) Insert(data entities.CallListItemModel) err
 }
 
 func (repo *callListItemsRepository) FindAllByWorkspace(workspaceID string, userID string) (*[]entities.CallListItemModel, error) {
-	filter := bson.M{"workspace_id": workspaceID, "user_id": userID}
+	// userID is empty for system/webhook lookups (workspace-wide). Only scope by
+	// user when a userID is actually provided, otherwise we'd filter on
+	// user_id == "" and match nothing.
+	filter := bson.M{"workspace_id": workspaceID}
+	if userID != "" {
+		filter["user_id"] = userID
+	}
 	var items []entities.CallListItemModel
 	cursor, err := repo.Collection.Find(repo.Context, filter)
 	if err != nil {
