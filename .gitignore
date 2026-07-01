@@ -22,4 +22,5 @@ yarn-error.log*
 
 # Skills configuration / cache
 skill/
-*.exe
+*.exe.DS_Store
+**/.DS_Store
