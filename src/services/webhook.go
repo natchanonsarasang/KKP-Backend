@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2/log"
+	"github.com/google/uuid"
 )
 
 type ClassifyResult struct {
@@ -81,14 +82,11 @@ func NewWebhookService(
 func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 	// Extract fields
 	callID := payload.OutboundID
-	if callID == "" {
-		callID = payload.CallID
-	}
 	status := payload.Status
 	action := payload.Action
 	conversationLog := payload.ConversationLog
 	audioURL := payload.AudioURL
-	phoneNumber := payload.PhoneNumber
+	phoneNumber := ""
 
 	// Extract phone number from audio_url if missing (format: ..._PHONE.wav)
 	if phoneNumber == "" && audioURL != "" {
@@ -218,9 +216,7 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 	// Update Call Record and related entities
 	if callRecord != nil {
 		var duration int
-		if payload.CallDuration != nil {
-			duration = s.toInt(payload.CallDuration)
-		} else if payload.Duration != nil {
+		if payload.Duration != nil {
 			duration = s.toInt(payload.Duration)
 		}
 
@@ -293,6 +289,35 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 						}
 						s.CallAttemptService.CreateAttempt(newAttempt)
 					}
+
+					// Create a "finished" attempt document recording the webhook-confirmed outcome.
+					nowAttempt := time.Now().UTC()
+					attemptNumber := 1
+					if attempts != nil {
+						for _, a := range *attempts {
+							if a.CallListItemID == item.ID {
+								attemptNumber++
+							}
+						}
+					}
+					s.CallAttemptService.CreateAttempt(entities.CallAttemptModel{
+						ID:              uuid.NewString(),
+						UserID:          resolvedUserID,
+						WorkspaceID:     resolvedWorkspaceID,
+						CallListItemID:  item.ID,
+						CallRecordID:    callRecord.ID,
+						AttemptNumber:   attemptNumber,
+						Status:          "finished",
+						CallOutcome:     callOutcome,
+						PickedUp:        &pickedUp,
+						AiCategory:      aiCategory,
+						ConversationLog: conversationLog,
+						AudioURL:        audioURL,
+						CallDuration:    duration,
+						ErrorReason:     "",
+						CreatedAt:       nowAttempt,
+						UpdatedAt:       nowAttempt,
+					})
 				}
 			}
 		}
