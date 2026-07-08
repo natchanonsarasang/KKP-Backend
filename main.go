@@ -50,7 +50,7 @@ func main() {
 	callTokensRepo := repo.NewCallTokensRepository(mongodb.Context, mongodb.MongoDB.Database(os.Getenv("MONGODB_NAME")))
 
 	sv1 := sv.NewDebtorsService(debtorRepo)
-	sv2 := sv.NewCallListItemsService(callListItemRepo)
+	sv2 := sv.NewCallListItemsService(callListItemRepo, debtorRepo)
 	sv3 := sv.NewCallAttemptsService(callAttemptRepo, callListItemRepo)
 	sv4 := sv.NewCallSessionsService(callSessionRepo)
 	callRecordsSv := sv.NewCallRecordsService(callRecordsRepo)

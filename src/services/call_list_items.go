@@ -4,6 +4,8 @@ import (
 	"errors"
 	"go-fiber-template/domain/entities"
 	"go-fiber-template/domain/repositories"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +13,7 @@ import (
 
 type callListItemsService struct {
 	CallListItemsRepository repositories.ICallListItemsRepository
+	DebtorsRepository       repositories.IDebtorsRepository
 }
 
 type ICallListItemsService interface {
@@ -29,9 +32,10 @@ type ICallListItemsService interface {
 	DeleteCallListItemByUser(id string, userID string, workspaceID string) error
 }
 
-func NewCallListItemsService(repo repositories.ICallListItemsRepository) ICallListItemsService {
+func NewCallListItemsService(repo repositories.ICallListItemsRepository, debtorsRepo repositories.IDebtorsRepository) ICallListItemsService {
 	return &callListItemsService{
 		CallListItemsRepository: repo,
+		DebtorsRepository:       debtorsRepo,
 	}
 }
 
@@ -62,9 +66,47 @@ func (sv *callListItemsService) CreateCallListItem(data entities.CallListItemMod
 	if data.ID == "" {
 		data.ID = uuid.NewString()
 	}
+	// Snapshot debtor phone/name/amount onto the item so completed history stays
+	// readable after the debtor row is deleted. Only look up when the caller didn't
+	// already supply a snapshot and a debtor is referenced.
+	if data.DebtorPhone == "" && data.DebtorID != "" && sv.DebtorsRepository != nil {
+		if debtor, err := sv.DebtorsRepository.FindByID(data.DebtorID); err == nil && debtor != nil {
+			data.DebtorPhone = debtor.PhoneNumber
+			data.DebtorName = DebtorDisplayName(debtor)
+			data.DebtorAmount = DebtorDisplayAmount(debtor)
+		}
+	}
 	data.CreatedAt = time.Now()
 	data.UpdatedAt = time.Now()
 	return sv.CallListItemsRepository.Insert(data)
+}
+
+// DebtorDisplayName mirrors the frontend's name resolution: prefer the
+// variables["name"] field, falling back to the debtor's Name column.
+func DebtorDisplayName(d *entities.DebtorModel) string {
+	if d.Variables != nil {
+		if n, ok := d.Variables["name"]; ok && strings.TrimSpace(n) != "" {
+			return n
+		}
+	}
+	return d.Name
+}
+
+// DebtorDisplayAmount mirrors the frontend's amount resolution: prefer
+// variables["amount"]/["outstanding_amount"] (comma-stripped), else TotalDebt.
+func DebtorDisplayAmount(d *entities.DebtorModel) float64 {
+	if d.Variables != nil {
+		for _, key := range []string{"amount", "outstanding_amount"} {
+			raw := strings.TrimSpace(d.Variables[key])
+			if raw == "" {
+				continue
+			}
+			if v, err := strconv.ParseFloat(strings.ReplaceAll(raw, ",", ""), 64); err == nil {
+				return v
+			}
+		}
+	}
+	return d.TotalDebt
 }
 
 func (sv *callListItemsService) CreateCallListItemByUser(userID string, data entities.CallListItemModel) error {
