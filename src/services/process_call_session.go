@@ -381,15 +381,18 @@ func (sv *callProcessService) queueNeverContactedDebtors(session *entities.CallS
 	newItems := make([]entities.CallListItemModel, 0, len(*debtors))
 	for _, d := range *debtors {
 		item := entities.CallListItemModel{
-			ID:          uuid.NewString(),
-			UserID:      session.UserID,
-			DebtorID:    d.ID,
-			WorkspaceID: session.WorkspaceID,
-			Status:      "pending",
-			RetryCount:  0,
-			ScheduledAt: &now,
-			CreatedAt:   now,
-			UpdatedAt:   now,
+			ID:           uuid.NewString(),
+			UserID:       session.UserID,
+			DebtorID:     d.ID,
+			WorkspaceID:  session.WorkspaceID,
+			Status:       "pending",
+			RetryCount:   0,
+			ScheduledAt:  &now,
+			DebtorPhone:  d.PhoneNumber,
+			DebtorName:   DebtorDisplayName(&d),
+			DebtorAmount: DebtorDisplayAmount(&d),
+			CreatedAt:    now,
+			UpdatedAt:    now,
 		}
 		if err := sv.CallListItemsRepository.Insert(item); err != nil {
 			fiberlog.Errorf("[Session %s] queueNeverContacted: insert item for debtor %s: %s", session.ID, d.ID, err)

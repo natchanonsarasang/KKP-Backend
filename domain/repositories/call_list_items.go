@@ -233,7 +233,7 @@ func (repo *callListItemsRepository) FindPendingBySlot(workspaceID, userID strin
 			},
 		},
 	}
-	opts := options.Find().SetLimit(int64(limit))
+	opts := options.Find().SetLimit(int64(limit)).SetSort(bson.D{{Key: "created_at", Value: -1}})
 	var items []entities.CallListItemModel
 	cursor, err := repo.Collection.Find(repo.Context, filter, opts)
 	if err != nil {
