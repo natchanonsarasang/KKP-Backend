@@ -20,6 +20,11 @@ type CallListItemModel struct {
 	NextRetryAt  *time.Time `bson:"next_retry_at,omitempty" json:"next_retry_at"`
 	RetryCount   int        `bson:"retry_count,omitempty" json:"retry_count"`
 	Notes        string     `bson:"notes,omitempty" json:"notes"`
+	// Debtor snapshot: captured when the item is created so completed history stays
+	// readable even after the debtor row is deleted (see CreateCallListItem).
+	DebtorPhone  string     `bson:"debtor_phone,omitempty" json:"debtor_phone"`
+	DebtorName   string     `bson:"debtor_name,omitempty" json:"debtor_name"`
+	DebtorAmount float64    `bson:"debtor_amount,omitempty" json:"debtor_amount"`
 	CreatedAt    time.Time  `bson:"created_at,omitempty" json:"created_at"`
 	UpdatedAt    time.Time  `bson:"updated_at,omitempty" json:"updated_at"`
 }
