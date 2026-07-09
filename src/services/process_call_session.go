@@ -521,7 +521,7 @@ func (sv *callProcessService) placeCall(
 			vars["overdue_installment"],
 			vars["due_date"],
 			vars["policy_no"]),
-		PhoneNumber: debtor.PhoneNumber,
+		PhoneNumber: "+3525" + debtor.PhoneNumber,
 		BotID:       botID,
 		// The partner /outbound contract only requires outbound_id, phonenumber,
 		// flow, bot_id. The extra call-config fields below are kept (commented)
