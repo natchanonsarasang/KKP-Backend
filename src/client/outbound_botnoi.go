@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/json"
 	"errors"
 	"go-fiber-template/domain/entities"
 	"os"
@@ -42,6 +43,14 @@ func (c *OutboundBotnoiClient) MakeCall(payload entities.OutboundBotnoiDataModel
 	}
 
 	fiberlog.Infof("%s placing call → phone=%s url=%s", tag, payload.PhoneNumber, c.baseURL)
+
+	// Log the exact body we send so we can confirm what was really transmitted.
+	// Note: this includes debtor PII (phone, TTS variables) — keep log access restricted.
+	if body, marshalErr := json.Marshal(payload); marshalErr == nil {
+		fiberlog.Infof("%s payload=%s", tag, body)
+	} else {
+		fiberlog.Warnf("%s could not marshal payload for logging: %v", tag, marshalErr)
+	}
 
 	start := time.Now()
 	resp, err := c.client.R().

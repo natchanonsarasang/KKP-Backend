@@ -38,37 +38,40 @@ func (sv *voicebotMakeCallService) MakeCall(data entities.VoicebotMakeCallDataMo
 	}
 	variables := prepareVoicebotVariables(data.Variables)
 
-	var interruptible string
-	if data.Interruptible {
-		interruptible = "True"
-	} else {
-		interruptible = "False"
-	}
+	// var interruptible string
+	// if data.Interruptible {
+	// 	interruptible = "True"
+	// } else {
+	// 	interruptible = "False"
+	// }
 
 	payload := entities.OutboundBotnoiDataModel{
 		OutboundID: data.OutboundID,
-		EventID:    data.EventID,
 		Flow: buildFlow(data.OutboundID,
 			getStringVal(variables, "name"),
 			getStringVal(variables, "outstanding_amount"),
 			getStringVal(variables, "overdue_installment"),
 			getStringVal(variables, "due_date"),
 			getStringVal(variables, "policy_no")),
-		PhoneNumber:      data.PhoneNumber,
-		SourcePhone:      "3525" + data.PhoneNumber,
-		Speaker:          "212",
-		Language:         "th",
-		AgentPhoneNumber: "0800000000",
-		Speed:            "1",
-		TTS:              "voicebot-premium",
-		BotID:            "6a06964fb875327d960f05f0",
-		ASRProvider:      "botnoi-aws-th-noise-classifier-v17c",
-		ASRLanguageCode:  "th",
-		/* ASRTimeout:       5,
-		FalseTimeoutSec:  "1",
-		FalseSilenceSec:  "0.1",
-		TrueSilenceSec:   "0.25", */
-		Interruptible:    interruptible,
+		PhoneNumber: data.PhoneNumber,
+		BotID:       "6a06964fb875327d960f05f0",
+		// The partner /outbound contract only requires outbound_id, phonenumber,
+		// flow, bot_id. The extra call-config fields below are kept (commented)
+		// for future use — re-enable if the partner API stops applying defaults.
+		// EventID:          data.EventID,
+		// SourcePhone:      "3525" + data.PhoneNumber,
+		// Speaker:          "212",
+		// Language:         "th",
+		// AgentPhoneNumber: "0800000000",
+		// Speed:            "1",
+		// TTS:              "voicebot-premium",
+		// ASRProvider:      "botnoi-aws-th-noise-classifier-v17c",
+		// ASRLanguageCode:  "th",
+		// ASRTimeout:       5,
+		// FalseTimeoutSec:  "1",
+		// FalseSilenceSec:  "0.1",
+		// TrueSilenceSec:   "0.25",
+		// Interruptible:    interruptible,
 	}
 
 	err := sv.outboutClient.MakeCall(payload)
