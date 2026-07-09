@@ -515,28 +515,31 @@ func (sv *callProcessService) placeCall(
 
 	payload := entities.OutboundBotnoiDataModel{
 		OutboundID: outboundID,
-		EventID:    "event_" + sessionID + "_" + item.ID,
 		Flow: buildFlow(outboundID,
 			vars["name"],
 			vars["outstanding_amount"],
 			vars["overdue_installment"],
 			vars["due_date"],
 			vars["policy_no"]),
-		PhoneNumber:      debtor.PhoneNumber,
-		SourcePhone:      "3525" + debtor.PhoneNumber,
-		Speaker:          "212",
-		Language:         "th",
-		AgentPhoneNumber: "0800000000",
-		Speed:            "1",
-		TTS:              "voicebot-premium",
-		BotID:            botID,
-		ASRProvider:      asrProvider,
-		ASRLanguageCode:  "th",
-		/* ASRTimeout:       5,
-		FalseTimeoutSec:  "1",
-		FalseSilenceSec:  "0.1",
-		TrueSilenceSec:   "0.25", */
-		Interruptible:    boolToStr(session.Settings.Interruptible),
+		PhoneNumber: debtor.PhoneNumber,
+		BotID:       botID,
+		// The partner /outbound contract only requires outbound_id, phonenumber,
+		// flow, bot_id. The extra call-config fields below are kept (commented)
+		// for future use — re-enable if the partner API stops applying defaults.
+		// EventID:          "event_" + sessionID + "_" + item.ID,
+		// SourcePhone:      "3525" + debtor.PhoneNumber,
+		// Speaker:          "212",
+		// Language:         "th",
+		// AgentPhoneNumber: "0800000000",
+		// Speed:            "1",
+		// TTS:              "voicebot-premium",
+		// ASRProvider:      asrProvider,
+		// ASRLanguageCode:  "th",
+		// ASRTimeout:       5,
+		// FalseTimeoutSec:  "1",
+		// FalseSilenceSec:  "0.1",
+		// TrueSilenceSec:   "0.25",
+		// Interruptible:    boolToStr(session.Settings.Interruptible),
 	}
 
 	if err := sv.OutboundClient.MakeCall(payload); err != nil {
