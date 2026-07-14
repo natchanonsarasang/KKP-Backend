@@ -130,7 +130,7 @@ func formatThaiDate(t time.Time) string {
 
 const (
 	staleThreshold = 5 * time.Minute
-	botID          = "6a06964fb875327d960f05f0"
+	botID          = "69ccce0db875327d960ef0cf"
 	asrProvider    = "botnoi-aws-th-noise-classifier-v17c"
 )
 
