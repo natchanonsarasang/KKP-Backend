@@ -12,6 +12,8 @@ type OutboundBotnoiDataModel struct {
 	Speed            string `json:"speed,omitempty"`
 	TTS              string `json:"tts,omitempty"`
 	BotID            string `json:"bot_id,omitempty"`
+	BotType          string `json:"bot_type,omitempty"`
+	Intent           string `json:"intent,omitempty"`
 	ASRProvider      string `json:"asr_provider,omitempty"`
 	ASRLanguageCode  string `json:"asr_language_code,omitempty"`
 	ASRTimeout       int    `json:"asr_timeout,omitempty"`
