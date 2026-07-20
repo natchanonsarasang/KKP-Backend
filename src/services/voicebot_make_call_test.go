@@ -56,10 +56,12 @@ func TestVoicebotMakeCallService_MakeCall(t *testing.T) {
 	}
 
 	variables := map[string]any{
-		"name":               "สมชาย",
-		"outstanding_amount": 1500.50,
-		"due_date":           "2026-06-20",
-		"policy_no":          "987654",
+		"name":                "สมชาย",
+		"car_detail":          "Toyota Vios กข1234",
+		"total_debt":          1500.50,
+		"total_interest":      120.25,
+		"total_fine":          50,
+		"overdue_installment": "3",
 	}
 
 	err := svc.MakeCall(entities.VoicebotMakeCallDataModel{
@@ -76,21 +78,15 @@ func TestVoicebotMakeCallService_MakeCall(t *testing.T) {
 	assert.Equal(t, "0812345678", capturedPayload.PhoneNumber)
 	assert.Equal(t, "35250812345678", capturedPayload.SourcePhone)
 	assert.Equal(t, "212", capturedPayload.Speaker)
-	assert.Equal(t, "", capturedPayload.FalseSilenceSec)
+	assert.Equal(t, "0.1", capturedPayload.FalseSilenceSec)
 	assert.Equal(t, "True", capturedPayload.Interruptible)
 
-	// Verify buildFlow content and Thai digits speech transformation for policy_no
-	// policy_no "987654" in Thai digit speech:
-	// 9 -> เก้า
-	// 8 -> แปด
-	// 7 -> เจ็ด
-	// 6 -> หก
-	// 5 -> ห้า
-	// 4 -> สี่
-	// So policy_no should contain "เก้า แปด เจ็ด หก ห้า สี่"
-	assert.Contains(t, capturedPayload.Flow, "เก้า แปด เจ็ด หก ห้า สี่")
+	// Verify buildFlow carries the new debt-collection variables through as-is.
 	assert.Contains(t, capturedPayload.Flow, "สมชาย")
+	assert.Contains(t, capturedPayload.Flow, "Toyota Vios กข1234")
 	assert.Contains(t, capturedPayload.Flow, "1500.5")
+	assert.Contains(t, capturedPayload.Flow, "<!total_interest|120.25!>")
+	assert.Contains(t, capturedPayload.Flow, "<!overdue_installment|3!>")
 }
 
 func TestVoicebotMakeCallService_ClientError(t *testing.T) {

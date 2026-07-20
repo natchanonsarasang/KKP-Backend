@@ -41,7 +41,7 @@ go run ./cmd/seed
 ### Required `.env` Configuration
 The following variables are loaded via `godotenv` from the project root:
 - `MONGODB_URI` - MongoDB Atlas connection string.
-- `MONGODB_NAME` / `DATABASE_NAME` - Database name.
+- `MONGODB_NAME` - Database name.
 - `PORT` - Service port (default `8080`).
 - `JWK_SET_URL` - Supabase JWKS endpoint for decoding signatures.
 - `OUTBOUND_URL` - Botnoi Voicebot dialer endpoint.
