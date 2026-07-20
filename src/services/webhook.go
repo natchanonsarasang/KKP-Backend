@@ -454,8 +454,7 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 }
 
 func (s *webhookService) classifyCall(payload entities.WebhookPayload, logText string) ClassifyResult {
-	apiKey := os.Getenv("LOVABLE_API_KEY")
-	if apiKey == "" || logText == "" || len(logText) < 5 {
+	if os.Getenv("GROQ_API_KEY") == "" || logText == "" || len(logText) < 5 {
 		return ClassifyResult{Category: "Not Reached", Reason: "No log or API key missing"}
 	}
 
@@ -546,6 +545,46 @@ Output format (STRICT JSON):
   "reason": "<short explanation>"
 }`
 
+	rawContent, err := s.callGroqChat("llama-3.3-70b-versatile", systemPrompt, `conversation_log:\n"""`+logText+`"""`)
+	if err != nil {
+		log.Errorf("AI Classify Error: %v", err)
+		return ClassifyResult{Category: "Not Reached", Reason: "AI request failed"}
+	}
+
+	var content struct {
+		StatusName string `json:"status_name"`
+		Reason     string `json:"reason"`
+	}
+	json.Unmarshal([]byte(rawContent), &content)
+
+	aiName := strings.ToLower(strings.TrimSpace(content.StatusName))
+	if aiName == "acknowledged" || aiName == "acknowledge" {
+		aiName = "planned more than 3"
+	}
+
+	for _, c := range CONVERSATION_CATEGORIES {
+		if strings.ToLower(c.Name) == aiName {
+			return ClassifyResult{
+				StatusID:   c.ID,
+				StatusName: c.Name,
+				Category:   c.Name,
+				Reason:     content.Reason,
+			}
+		}
+	}
+
+	return ClassifyResult{Category: "Not Reached", Reason: "Defaulted or unmatched"}
+}
+
+// callGroqChat sends an OpenAI-compatible chat-completion request to Groq's free
+// API and returns the assistant message content. All calls request strict JSON
+// output at temperature 0. Requires GROQ_API_KEY.
+func (s *webhookService) callGroqChat(model, systemPrompt, userContent string) (string, error) {
+	apiKey := os.Getenv("GROQ_API_KEY")
+	if apiKey == "" {
+		return "", fmt.Errorf("GROQ_API_KEY not set")
+	}
+
 	type aiRequest struct {
 		Model          string                 `json:"model"`
 		Messages       []map[string]string    `json:"messages"`
@@ -554,30 +593,35 @@ Output format (STRICT JSON):
 	}
 
 	reqBody := aiRequest{
-		Model: "google/gemini-2.5-flash",
+		Model: model,
 		Messages: []map[string]string{
 			{"role": "system", "content": systemPrompt},
-			{"role": "user", "content": `conversation_log:\n"""` + logText + `"""`},
+			{"role": "user", "content": userContent},
 		},
 		ResponseFormat: map[string]interface{}{"type": "json_object"},
 		Temperature:    0,
 	}
 
 	jsonBody, _ := json.Marshal(reqBody)
-	resp, err := http.Post("https://ai.gateway.lovable.dev/v1/chat/completions", "application/json", bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest("POST", "https://api.groq.com/openai/v1/chat/completions", bytes.NewBuffer(jsonBody))
 	if err != nil {
-		log.Errorf("AI Classify Error: Request failed: %v", err)
-		return ClassifyResult{Category: "Not Reached", Reason: "AI request failed"}
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		log.Errorf("AI Classify Error: Status %d, Body: %s", resp.StatusCode, string(body))
-		return ClassifyResult{Category: "Not Reached", Reason: "AI response error"}
+		return "", fmt.Errorf("groq status %d: %s", resp.StatusCode, string(body))
 	}
 
-	body, _ := io.ReadAll(resp.Body)
 	var aiResponse struct {
 		Choices []struct {
 			Message struct {
@@ -585,38 +629,17 @@ Output format (STRICT JSON):
 			} `json:"message"`
 		} `json:"choices"`
 	}
-	json.Unmarshal(body, &aiResponse)
-
-	if len(aiResponse.Choices) > 0 {
-		var content struct {
-			StatusName string `json:"status_name"`
-			Reason     string `json:"reason"`
-		}
-		json.Unmarshal([]byte(aiResponse.Choices[0].Message.Content), &content)
-
-		aiName := strings.ToLower(strings.TrimSpace(content.StatusName))
-		if aiName == "acknowledged" || aiName == "acknowledge" {
-			aiName = "planned more than 3"
-		}
-
-		for _, c := range CONVERSATION_CATEGORIES {
-			if strings.ToLower(c.Name) == aiName {
-				return ClassifyResult{
-					StatusID:   c.ID,
-					StatusName: c.Name,
-					Category:   c.Name,
-					Reason:     content.Reason,
-				}
-			}
-		}
+	if err := json.Unmarshal(body, &aiResponse); err != nil {
+		return "", err
 	}
-
-	return ClassifyResult{Category: "Not Reached", Reason: "Defaulted or unmatched"}
+	if len(aiResponse.Choices) == 0 {
+		return "", fmt.Errorf("groq returned no choices")
+	}
+	return aiResponse.Choices[0].Message.Content, nil
 }
 
 func (s *webhookService) extractCallbackDate(logText string) string {
-	apiKey := os.Getenv("LOVABLE_API_KEY")
-	if apiKey == "" || logText == "" || len(logText) < 5 {
+	if os.Getenv("GROQ_API_KEY") == "" || logText == "" || len(logText) < 5 {
 		return ""
 	}
 
@@ -637,53 +660,17 @@ Rules:
 - "สัปดาห์หน้า" → ref + 7 days
 Return STRICT JSON only: { "date_con": "YYYY-MM-DD" | null }`
 
-	type aiRequest struct {
-		Model          string                 `json:"model"`
-		Messages       []map[string]string    `json:"messages"`
-		ResponseFormat map[string]interface{} `json:"response_format"`
-		Temperature    float64                `json:"temperature"`
-	}
-
-	reqBody := aiRequest{
-		Model: "google/gemini-3-flash-preview",
-		Messages: []map[string]string{
-			{"role": "system", "content": systemPrompt},
-			{"role": "user", "content": `conversation_log:\n"""` + logText + `"""`},
-		},
-		ResponseFormat: map[string]interface{}{"type": "json_object"},
-		Temperature:    0,
-	}
-
-	jsonBody, _ := json.Marshal(reqBody)
-	resp, err := http.Post("https://ai.gateway.lovable.dev/v1/chat/completions", "application/json", bytes.NewBuffer(jsonBody))
-	if err != nil || resp.StatusCode != http.StatusOK {
-		if resp != nil {
-			body, _ := io.ReadAll(resp.Body)
-			log.Errorf("AI Date Extract Error: Status %d, Body: %s", resp.StatusCode, string(body))
-		}
+	rawContent, err := s.callGroqChat("llama-3.3-70b-versatile", systemPrompt, `conversation_log:\n"""`+logText+`"""`)
+	if err != nil {
+		log.Errorf("AI Date Extract Error: %v", err)
 		return ""
 	}
-	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
-	var aiResponse struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
+	var content struct {
+		DateCon string `json:"date_con"`
 	}
-	json.Unmarshal(body, &aiResponse)
-
-	if len(aiResponse.Choices) > 0 {
-		var content struct {
-			DateCon string `json:"date_con"`
-		}
-		json.Unmarshal([]byte(aiResponse.Choices[0].Message.Content), &content)
-		return content.DateCon
-	}
-
-	return ""
+	json.Unmarshal([]byte(rawContent), &content)
+	return content.DateCon
 }
 
 func (s *webhookService) triggerSessionProcessor(sessionID string) {

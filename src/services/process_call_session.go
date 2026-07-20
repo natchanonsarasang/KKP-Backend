@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -130,7 +131,6 @@ func formatThaiDate(t time.Time) string {
 
 const (
 	staleThreshold = 5 * time.Minute
-	botID          = "69ccce0db875327d960ef0cf"
 	asrProvider    = "botnoi-aws-th-noise-classifier-v17c"
 )
 
@@ -509,6 +509,9 @@ func (sv *callProcessService) placeCall(
 	}
 
 	vars := prepareDebtorVariables(debtor.Variables)
+	vars["bot_type"] = "{{in_init_conversation}}"
+	vars["intent"] = "{{in_init_conversation}}"
+
 
 	// outbound_id is what comes back to us in the webhook, so we use it as the call id.
 	outboundID := "outbound_" + item.ID
@@ -517,12 +520,17 @@ func (sv *callProcessService) placeCall(
 		OutboundID: outboundID,
 		Flow: buildFlow(outboundID,
 			vars["name"],
-			vars["outstanding_amount"],
+			vars["car_detail"],
+			vars["total_debt"],
+			vars["total_interest"],
+			vars["total_fine"],
 			vars["overdue_installment"],
-			vars["due_date"],
-			vars["policy_no"]),
+			vars["bot_type"],
+			vars["intent"]),
 		PhoneNumber: "3525" + debtor.PhoneNumber,
-		BotID:       botID,
+		BotID:       os.Getenv("BOT_ID"),
+		BotType:     os.Getenv("BOT_TYPE"),
+		Intent:      "in_init_conversation",
 		// The partner /outbound contract only requires outbound_id, phonenumber,
 		// flow, bot_id. The extra call-config fields below are kept (commented)
 		// for future use — re-enable if the partner API stops applying defaults.

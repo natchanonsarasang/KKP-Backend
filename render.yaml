@@ -29,8 +29,6 @@ services:
         sync: false           # set in dashboard (secret)
       - key: MONGODB_NAME
         value: callecto_db
-      - key: DATABASE_NAME    # legacy alias still read by some code paths
-        value: callecto_db
 
       # --- Auth (Supabase JWKS preferred; HS256 fallback) ---
       - key: SUPABASE_URL

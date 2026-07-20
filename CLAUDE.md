@@ -31,7 +31,7 @@ Docker: `docker build -t callecto-api .` then run exposing port 8080. The Docker
 ## Environment
 
 `.env` is loaded at startup via godotenv (falls back to system env if absent). Required keys:
-`MONGODB_URI`, `MONGODB_NAME` (and legacy `DATABASE_NAME`), `PORT` (defaults to 8080).
+`MONGODB_URI`, `MONGODB_NAME`, `PORT` (defaults to 8080).
 Auth uses Supabase JWKS — set `JWK_SET_URL` or `SUPABASE_URL` (falls back to `VITE_SUPABASE_URL`);
 if neither is set, it validates HS256 against `JWT_SECRET_KEY`. Outbound calls need
 `OUTBOUND_URL` and `OUTBOUND_ACCESS_TOKEN`.

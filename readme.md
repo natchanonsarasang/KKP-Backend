@@ -53,7 +53,6 @@ go mod tidy
 Create a `.env` file in the root directory (based on the sample [.env](file:///home/cellul4r/Documents/botnoi/callecto-api/.env)):
 
 ```ini
-DATABASE_NAME=callecto_db
 PORT=8080
 
 MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net
