@@ -199,6 +199,17 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 	aiCategory := aiResult.Category
 	aiReason := aiResult.Reason
 	aiConfidence := aiResult.Confidence
+
+	// Hung up / rejected calls never produced a real conversation for the AI to
+	// analyse, so the classifier only ever returns a synthetic "system status"
+	// reason/confidence. Blank them out so the UI shows "-" for เหตุผล ai and
+	// ความมั่นใจ instead of a misleading value. Completed calls keep whatever the
+	// AI returned (including "AI request failed").
+	if callOutcome == "Hangup" || callOutcome == "Rejected" {
+		aiReason = ""
+		aiConfidence = 0
+	}
+
 	log.Infof("%s ai category=%q reason=%q confidence=%.2f", tag, aiCategory, aiReason, aiConfidence)
 
 	// Resolve Owner (UserID, WorkspaceID)
