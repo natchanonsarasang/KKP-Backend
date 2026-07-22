@@ -47,19 +47,19 @@ func TestAIClassifyCall(t *testing.T) {
 		want string // expected category for clear-cut cases
 	}{
 		{
-			name: "promise within 3 days",
+			name: "willing to pay",
 			log:  "Bot: สวัสดีค่ะ ติดต่อเรื่องยอดค้างชำระ 4000 บาทค่ะ User: พรุ่งนี้ผมโอนให้เลยครับ",
-			want: "Promised to Pay",
+			want: "Convenient to Pay",
 		},
 		{
 			name: "refuses to pay",
 			log:  "Bot: แจ้งยอดค้างชำระค่ะ User: ไม่จ่าย ไม่มีเงิน อย่าโทรมาอีก วางสายนะ",
-			want: "Refused",
+			want: "Not Convenient to Pay",
 		},
 		{
 			name: "asks to restructure",
 			log:  "Bot: ยอดค้างชำระ 4000 บาทค่ะ User: ขอผ่อนเป็นงวดได้ไหมครับ จ่ายทีเดียวไม่ไหว",
-			want: "Restructure Requested",
+			want: "Not Convenient to Pay",
 		},
 	}
 

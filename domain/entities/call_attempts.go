@@ -15,6 +15,8 @@ type CallAttemptModel struct {
 	CallOutcome     string             `bson:"call_outcome,omitempty" json:"call_outcome"`
 	PickedUp        *bool               `bson:"picked_up,omitempty" json:"picked_up"`
 	AiCategory      string             `bson:"ai_category,omitempty" json:"ai_category"`
+	AiReason        string             `bson:"ai_reason,omitempty" json:"ai_reason"`
+	AiConfidence    float64            `bson:"ai_confidence,omitempty" json:"ai_confidence"`
 	ConversationLog string             `bson:"conversation_log,omitempty" json:"conversation_log"`
 	AudioURL        string             `bson:"audio_url,omitempty" json:"audio_url"`
 	CallDuration    int                `bson:"call_duration,omitempty" json:"call_duration"`

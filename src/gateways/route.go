@@ -54,6 +54,12 @@ func GatewayCallSessions(gateway HTTPGateway, app *fiber.App) {
 	api.Delete("/:id", gateway.DeleteCallSession)
 }
 
+func GatewayCallStats(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/call-stats", middlewares.SetJWtHeaderHandler())
+
+	api.Get("/by-debtor", gateway.GetCallStatsByDebtor)
+}
+
 func GatewayCallRecords(gateway HTTPGateway, app *fiber.App) {
 	api := app.Group("/api/v1/call-records", middlewares.SetJWtHeaderHandler())
 

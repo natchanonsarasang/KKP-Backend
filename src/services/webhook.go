@@ -18,10 +18,11 @@ import (
 )
 
 type ClassifyResult struct {
-	StatusID   int    `json:"status_id"`
-	StatusName string `json:"status_name"`
-	Category   string `json:"category"`
-	Reason     string `json:"reason"`
+	StatusID   int     `json:"status_id"`
+	StatusName string  `json:"status_name"`
+	Category   string  `json:"category"`
+	Reason     string  `json:"reason"`
+	Confidence float64 `json:"confidence"`
 }
 
 var CONVERSATION_CATEGORIES = []struct {
@@ -30,22 +31,13 @@ var CONVERSATION_CATEGORIES = []struct {
 	Thai  string
 	Group string
 }{
-	{1, "Planned More Than 3", "วางแผนชำระเกิน 3 วัน", "main"},
-	{2, "Promised to Pay", "รับปากชำระ", "main"},
-	{3, "Restructure Requested", "ขอปรับโครงสร้างหนี้", "main"},
-	{4, "Inconvenient (With Date)", "ไม่สะดวก (มีนัดหมาย)", "main"},
-	{16, "Inconvenient (Without Date)", "ไม่สะดวก (ไม่มีนัดหมาย)", "main"},
-	{5, "Already Paid", "ชำระเรียบร้อยแล้ว", "main"},
-	{6, "Not Reached", "ติดต่อไม่ได้", "main"},
-	{7, "Refused", "ปฏิเสธ", "main"},
-	{8, "Not Convenient", "ไม่สะดวกคุย", "sub"},
-	{9, "Wrong Person", "ไม่ใช่ผู้เอาประกัน", "sub"},
-	{10, "Call Later", "นัดหมายให้ติดต่อใหม่", "sub"},
-	{11, "Transfer", "ขอคุยกับเจ้าหน้าที่", "sub"},
-	{12, "Background Noise", "เสียงแทรก/เสียงรบกวน", "sub"},
-	{13, "Silence", "ลูกค้าเงียบ", "sub"},
-	{14, "Dropped Call", "สายหลุดระหว่างสนทนา", "sub"},
-	{15, "Out of Topic", "พูดเรื่องอื่น", "sub"},
+	{1, "Convenient to Pay", "สะดวกจ่าย", "main"},
+	{2, "Not Convenient to Pay", "ไม่สะดวกจ่าย", "main"},
+	{3, "Not Convenient to Talk", "ไม่สะดวกคุย", "main"},
+	{4, "Silent", "เงียบ", "main"},
+	{5, "Off Topic", "พูดเรื่องอื่น นอกเรื่อง", "main"},
+	{6, "Wrong Number", "โทรผิด", "main"},
+	{7, "Not Reached", "ติดต่อไม่ได้", "main"},
 }
 
 type IWebhookService interface {
@@ -167,7 +159,11 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 		}
 	}
 
-	pickedUp := hasUserSpoken || isSilence || s.contains([]string{string(entities.StatusConfirmed), string(entities.StatusDeclined), string(entities.StatusNoResponse), string(entities.StatusCompleted)}, string(mappedStatus))
+	// StatusHangedUp means the debtor answered, talked, then hung up — that is a
+	// pickup. (A "rejected" status is the caller rejecting the incoming call and
+	// stays not-picked-up.) Include it so hanged_up calls, which often arrive with
+	// no conversation_log, are still counted as picked up.
+	pickedUp := hasUserSpoken || isSilence || s.contains([]string{string(entities.StatusConfirmed), string(entities.StatusDeclined), string(entities.StatusNoResponse), string(entities.StatusCompleted), string(entities.StatusHangedUp)}, string(mappedStatus))
 
 	var finalStatus string
 	if mappedStatus == entities.StatusHangedUp {
@@ -201,7 +197,9 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 	// --- AI Categorization ---
 	aiResult := s.classifyCall(payload, conversationLog)
 	aiCategory := aiResult.Category
-	log.Infof("%s ai category=%q reason=%q", tag, aiCategory, aiResult.Reason)
+	aiReason := aiResult.Reason
+	aiConfidence := aiResult.Confidence
+	log.Infof("%s ai category=%q reason=%q confidence=%.2f", tag, aiCategory, aiReason, aiConfidence)
 
 	// Resolve Owner (UserID, WorkspaceID)
 	var resolvedUserID, resolvedWorkspaceID string
@@ -281,6 +279,8 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 					item.CallOutcome = callOutcome
 					item.PickedUp = &pickedUp
 					item.AICategory = aiCategory
+					item.AIReason = aiReason
+					item.AIConfidence = aiConfidence
 					item.NextRetryAt = nil
 					notesObj := map[string]string{
 						"audio_url":        audioURL,
@@ -306,6 +306,8 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 								attempt.CallOutcome = callOutcome
 								attempt.PickedUp = &pickedUp
 								attempt.AiCategory = aiCategory
+								attempt.AiReason = aiReason
+								attempt.AiConfidence = aiConfidence
 								attempt.ConversationLog = conversationLog
 								attempt.AudioURL = audioURL
 								attempt.CallDuration = duration
@@ -329,6 +331,8 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 							CallOutcome:     callOutcome,
 							PickedUp:        &pickedUp,
 							AiCategory:      aiCategory,
+							AiReason:        aiReason,
+							AiConfidence:    aiConfidence,
 							ConversationLog: conversationLog,
 							AudioURL:        audioURL,
 							CallDuration:    duration,
@@ -357,6 +361,8 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 						CallOutcome:     callOutcome,
 						PickedUp:        &pickedUp,
 						AiCategory:      aiCategory,
+						AiReason:        aiReason,
+						AiConfidence:    aiConfidence,
 						ConversationLog: conversationLog,
 						AudioURL:        audioURL,
 						CallDuration:    duration,
@@ -393,13 +399,10 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 					}
 
 					if mappedStatus == entities.StatusConfirmed {
-						debtor.AcceptCount++
 						debtor.LastResponse = "accept"
 					} else if mappedStatus == entities.StatusDeclined {
-						debtor.RejectCount++
 						debtor.LastResponse = "reject"
 					} else if mappedStatus == entities.StatusNoResponse || (mappedStatus == entities.StatusCompleted && pickedUp) {
-						debtor.OtherCount++
 						debtor.LastResponse = "unknown"
 					}
 
@@ -455,7 +458,7 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 
 func (s *webhookService) classifyCall(payload entities.WebhookPayload, logText string) ClassifyResult {
 	if os.Getenv("GROQ_API_KEY") == "" || logText == "" || len(logText) < 5 {
-		return ClassifyResult{Category: "Not Reached", Reason: "No log or API key missing"}
+		return ClassifyResult{Category: "Not Reached", Reason: "No log or API key missing", Confidence: 0}
 	}
 
 	// System-level status map
@@ -470,7 +473,7 @@ func (s *webhookService) classifyCall(payload entities.WebhookPayload, logText s
 	}
 	rawStatus := strings.ToLower(strings.TrimSpace(payload.Status))
 	if cat, ok := systemStatusMap[rawStatus]; ok {
-		return ClassifyResult{Category: cat, Reason: "System status: " + rawStatus}
+		return ClassifyResult{Category: cat, Reason: "System status: " + rawStatus, Confidence: 1}
 	}
 
 	// Rule-based silence detection
@@ -485,7 +488,7 @@ func (s *webhookService) classifyCall(payload entities.WebhookPayload, logText s
 			}
 		}
 		if !hasRealSpeech {
-			return ClassifyResult{Category: "Silence", Reason: "Customer picked up but remained silent (ASR TIMEOUT)"}
+			return ClassifyResult{Category: "Silent", Reason: "Customer picked up but remained silent (ASR TIMEOUT)", Confidence: 1}
 		}
 	}
 
@@ -497,7 +500,7 @@ func (s *webhookService) classifyCall(payload entities.WebhookPayload, logText s
 	}
 	for _, p := range audioQualityPatterns {
 		if strings.Contains(strings.ToLower(logText), p) {
-			return ClassifyResult{Category: "Background Noise", Reason: "Detected audio-quality keywords"}
+			return ClassifyResult{Category: "Not Convenient to Talk", Reason: "Detected audio-quality keywords", Confidence: 1}
 		}
 	}
 
@@ -512,31 +515,18 @@ Choose exactly ONE category (use the EXACT English label) from this list:
 ` + categoryList + `
 
 CATEGORY DEFINITIONS
+- Convenient to Pay      → Customer is able/willing to pay: confirms payment, agrees to a payment date or plan, says they will pay ("จ่ายได้", "โอนให้", "พรุ่งนี้จ่าย"), states it is already paid, or otherwise acknowledges the debt with clear intent to pay.
+- Not Convenient to Pay  → Customer cannot or will not pay now: says they have no money / cannot afford it, refuses to pay, denies the debt, or asks to restructure / defer / pay in installments because paying now is not possible.
+- Not Convenient to Talk → Customer picked up but it is not a convenient time to talk: says they are busy, asks to be called back later, or cannot hear clearly due to audio problems.
+- Silent                 → Customer picked up but remained silent throughout with no meaningful verbal response.
+- Off Topic              → Customer kept talking about unrelated topics / went off-topic with no resolution.
+- Wrong Number           → Customer says this is the wrong number / not the intended person / not the policyholder.
+- Not Reached            → Customer could not actually be contacted (no answer, line dead, voicemail, unreachable, or hung up before any meaningful exchange).
 
-Main Outcomes (business result of the call — ALWAYS PREFER THESE):
-- Planned More Than 3     → Customer indicates a payment plan / will pay, but the agreed date is MORE THAN 3 days from the call date (e.g. "อาทิตย์หน้า", "เกิน 3 วัน", "เดือนหน้า", "อีก 5 วัน", or any specific date > 3 days away). Also use for vague acknowledgement of the debt with no clear near-term commitment.
-- Promised to Pay        → Customer explicitly confirms payment WITHIN 3 days from the call date (today, tomorrow, "พรุ่งนี้", "มะรืน", "อีก 2 วัน", or any specific date ≤ 3 days away).
-- Restructure Requested  → Customer asks for debt restructuring, installment plans, payment negotiation, partial payment, deferral, or settlement discussion.
-- Inconvenient (With Date)    → Customer says it is not convenient right now BUT provides a specific callback date/time (e.g. "call me back tomorrow at 3pm", "next Monday morning"). A concrete schedule is agreed.
-- Inconvenient (Without Date) → Customer says it is not convenient and does NOT provide any specific callback date/time (vague "call me later", "not now", "I'm busy").
-- Already Paid           → Customer states the payment has already been completed/settled.
-- Not Reached            → Customer could not actually be contacted (no answer, line dead, voicemail, unreachable, hung up before any meaningful exchange).
-- Refused                → Customer clearly refuses to pay, denies the debt outright, or terminates the conversation in clear refusal.
-
-Conversation Behaviors (use ONLY when no clear business outcome above exists):
-- Not Convenient   → Customer says it is not a convenient time but did not commit to a callback time.
-- Wrong Person     → Customer says this is not the policyholder / wrong number.
-- Call Later       → Customer vaguely asks to be called another time without a fixed schedule.
-- Transfer         → Customer asks to speak to a human agent / staff.
-- Background Noise → Audio quality issues, loud background, customer cannot hear clearly, transcript dominated by noise.
-- Silence          → Customer remained silent throughout / no verbal response.
-- Dropped Call     → Call disconnected with no meaningful customer interaction (pure cutoff).
-- Out of Topic     → Customer kept talking about unrelated topics with no resolution.
-
-CRITICAL CLASSIFICATION RULES
-1. MANDATORY DEBT DISCLOSURE CHECK (HIGHEST PRIORITY): Verify Bot has DISCLOSED "Debt Details".
-2. HANDLING "NOT CONVENIENT" & CALLBACK REQUESTS: Use With Date/Without Date labels.
-3. PAYMENT CLASSIFICATION (ONLY AFTER DISCLOSURE): ≤ 3 days = Promised to Pay, > 3 days = Planned More Than 3.
+CLASSIFICATION RULES
+1. Prefer a payment outcome (Convenient to Pay / Not Convenient to Pay) whenever the customer engaged with the debt topic.
+2. Use Not Convenient to Talk only when the customer engaged but could not talk now and gave no payment answer.
+3. Use Wrong Number / Silent / Off Topic / Not Reached only when no payment outcome applies.
 
 Output format (STRICT JSON):
 {
@@ -548,19 +538,17 @@ Output format (STRICT JSON):
 	rawContent, err := s.callGroqChat("llama-3.3-70b-versatile", systemPrompt, `conversation_log:\n"""`+logText+`"""`)
 	if err != nil {
 		log.Errorf("AI Classify Error: %v", err)
-		return ClassifyResult{Category: "Not Reached", Reason: "AI request failed"}
+		return ClassifyResult{Category: "Not Reached", Reason: "AI request failed", Confidence: 0}
 	}
 
 	var content struct {
-		StatusName string `json:"status_name"`
-		Reason     string `json:"reason"`
+		StatusName string  `json:"status_name"`
+		Reason     string  `json:"reason"`
+		Confidence float64 `json:"confidence"`
 	}
 	json.Unmarshal([]byte(rawContent), &content)
 
 	aiName := strings.ToLower(strings.TrimSpace(content.StatusName))
-	if aiName == "acknowledged" || aiName == "acknowledge" {
-		aiName = "planned more than 3"
-	}
 
 	for _, c := range CONVERSATION_CATEGORIES {
 		if strings.ToLower(c.Name) == aiName {
@@ -569,11 +557,12 @@ Output format (STRICT JSON):
 				StatusName: c.Name,
 				Category:   c.Name,
 				Reason:     content.Reason,
+				Confidence: content.Confidence,
 			}
 		}
 	}
 
-	return ClassifyResult{Category: "Not Reached", Reason: "Defaulted or unmatched"}
+	return ClassifyResult{Category: "Not Reached", Reason: "Defaulted or unmatched", Confidence: 0}
 }
 
 // callGroqChat sends an OpenAI-compatible chat-completion request to Groq's free
