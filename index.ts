@@ -518,25 +518,19 @@ async function processSession(supabase: any, sessionId: string) {
         let mockStatus: string;
         let mockOutcome: string;
         let pickedUp = false;
-        let acceptIncrement = 0;
-        let rejectIncrement = 0;
-        let otherIncrement = 0;
 
         if (rand < 0.4) {
           mockStatus = "confirmed";
           mockOutcome = "ยืนยันชำระ";
           pickedUp = true;
-          acceptIncrement = 1;
         } else if (rand < 0.6) {
           mockStatus = "declined";
           mockOutcome = "ปฏิเสธ";
           pickedUp = true;
-          rejectIncrement = 1;
         } else if (rand < 0.8) {
           mockStatus = "no_response";
           mockOutcome = "ไม่ตอบ";
           pickedUp = true;
-          otherIncrement = 1;
         } else if (rand < 0.9) {
           mockStatus = "no_answer";
           mockOutcome = "ไม่รับสาย";
@@ -588,16 +582,6 @@ async function processSession(supabase: any, sessionId: string) {
         } else {
           debtorUpdate.not_picked_up_count =
             ((debtor as unknown as { not_picked_up_count?: number }).not_picked_up_count || 0) + 1;
-        }
-
-        if (acceptIncrement > 0) {
-          debtorUpdate.accept_count = ((debtor as unknown as { accept_count?: number }).accept_count || 0) + 1;
-        }
-        if (rejectIncrement > 0) {
-          debtorUpdate.reject_count = ((debtor as unknown as { reject_count?: number }).reject_count || 0) + 1;
-        }
-        if (otherIncrement > 0) {
-          debtorUpdate.other_count = ((debtor as unknown as { other_count?: number }).other_count || 0) + 1;
         }
 
         await supabase.from("debtors").update(debtorUpdate).eq("id", item.debtor_id);

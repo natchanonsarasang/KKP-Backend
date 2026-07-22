@@ -35,6 +35,8 @@ type ICallListItemsRepository interface {
 	UpdateManyStatus(ids []string, status, outcome string, pickedUp bool) error
 	FindPendingBySlot(workspaceID, userID string, limit int) (*[]entities.CallListItemModel, error)
 	CountWaitingRetry(workspaceID, userID string) (int64, error)
+	// Analytics
+	AggregateCallStatsByDebtor(workspaceID, userID string) (*[]entities.DebtorStatusCount, error)
 }
 
 func NewCallListItemsRepository(db *MongoDB) ICallListItemsRepository {
@@ -246,6 +248,98 @@ func (repo *callListItemsRepository) FindPendingBySlot(workspaceID, userID strin
 		return nil, err
 	}
 	return &items, nil
+}
+
+// AggregateCallStatsByDebtor computes, per debtor, how many call_records fall
+// into each status bucket. call_records carry no debtor_id, so this anchors on
+// call_list_items (which have debtor_id) and gathers every record linked to an
+// item — its current call_record_id plus each retry's record id from
+// call_attempts — then groups the joined records by (debtor_id, status).
+//
+// This is the source-of-truth alternative to the drift-prone picked_up_count /
+// not_picked_up_count counters on the debtor document.
+func (repo *callListItemsRepository) AggregateCallStatsByDebtor(workspaceID, userID string) (*[]entities.DebtorStatusCount, error) {
+	match := bson.M{"workspace_id": workspaceID}
+	// userID is empty for workspace-wide/system lookups; only scope by user when
+	// provided, otherwise we'd filter on user_id == "" and match nothing.
+	if userID != "" {
+		match["user_id"] = userID
+	}
+
+	nonEmpty := func(expr any) bson.M {
+		return bson.M{"$and": bson.A{
+			bson.M{"$ne": bson.A{expr, ""}},
+			bson.M{"$ne": bson.A{expr, nil}},
+		}}
+	}
+
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: match}},
+		// Pull this item's attempts so retry records (not on the item itself) are counted.
+		{{Key: "$lookup", Value: bson.M{
+			"from":         "call_attempts",
+			"localField":   "id",
+			"foreignField": "call_list_item_id",
+			"as":           "attempts",
+		}}},
+		// Build a deduped set of record ids: the item's own + all of its attempts'.
+		{{Key: "$project", Value: bson.M{
+			"debtor_id": 1,
+			"record_ids": bson.M{"$setUnion": bson.A{
+				bson.M{"$cond": bson.A{
+					nonEmpty("$call_record_id"),
+					bson.A{"$call_record_id"},
+					bson.A{},
+				}},
+				bson.M{"$filter": bson.M{
+					"input": "$attempts.call_record_id",
+					"as":    "rid",
+					"cond":  nonEmpty("$$rid"),
+				}},
+			}},
+		}}},
+		// Resolve each record id to its call_record (for the status).
+		{{Key: "$lookup", Value: bson.M{
+			"from":         "call_records",
+			"localField":   "record_ids",
+			"foreignField": "id",
+			"as":           "records",
+		}}},
+		{{Key: "$unwind", Value: "$records"}},
+		{{Key: "$group", Value: bson.M{
+			"_id":   bson.M{"debtor_id": "$debtor_id", "status": "$records.status"},
+			"count": bson.M{"$sum": 1},
+		}}},
+	}
+
+	cursor, err := repo.Collection.Aggregate(repo.Context, pipeline)
+	if err != nil {
+		fiberlog.Errorf("CallListItems -> AggregateCallStatsByDebtor: %s \n", err)
+		return nil, err
+	}
+	defer cursor.Close(repo.Context)
+
+	var raw []struct {
+		ID struct {
+			DebtorID string `bson:"debtor_id"`
+			Status   string `bson:"status"`
+		} `bson:"_id"`
+		Count int `bson:"count"`
+	}
+	if err := cursor.All(repo.Context, &raw); err != nil {
+		fiberlog.Errorf("CallListItems -> AggregateCallStatsByDebtor: %s \n", err)
+		return nil, err
+	}
+
+	rows := make([]entities.DebtorStatusCount, 0, len(raw))
+	for _, r := range raw {
+		rows = append(rows, entities.DebtorStatusCount{
+			DebtorID: r.ID.DebtorID,
+			Status:   r.ID.Status,
+			Count:    r.Count,
+		})
+	}
+	return &rows, nil
 }
 
 // CountWaitingRetry counts retry items whose next_retry_at is still in the future.

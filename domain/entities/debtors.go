@@ -25,9 +25,6 @@ type DebtorModel struct {
 	CallOutcome        string            `bson:"call_outcome,omitempty" json:"call_outcome"`
 	PickedUpCount      int               `bson:"picked_up_count,omitempty" json:"picked_up_count"`
 	NotPickedUpCount   int               `bson:"not_picked_up_count,omitempty" json:"not_picked_up_count"`
-	AcceptCount        int               `bson:"accept_count,omitempty" json:"accept_count"`
-	RejectCount        int               `bson:"reject_count,omitempty" json:"reject_count"`
-	OtherCount         int               `bson:"other_count,omitempty" json:"other_count"`
 	Variables          map[string]string `bson:"variables,omitempty" json:"variables"`
 	UserID             string            `bson:"user_id,omitempty" json:"user_id"`
 	WorkspaceID        string            `bson:"workspace_id,omitempty" json:"workspace_id"`
@@ -40,9 +37,6 @@ type DebtorStatsUpdate struct {
 	SuccessfulContacts int        `bson:"successful_contacts"`
 	PickedUpCount      int        `bson:"picked_up_count"`
 	NotPickedUpCount   int        `bson:"not_picked_up_count"`
-	AcceptCount        int        `bson:"accept_count"`
-	RejectCount        int        `bson:"reject_count"`
-	OtherCount         int        `bson:"other_count"`
 	LastContactAt      *time.Time `bson:"last_contact_at"`
 	LastResponse       string     `bson:"last_response"`
 	CallOutcome        string     `bson:"call_outcome"`

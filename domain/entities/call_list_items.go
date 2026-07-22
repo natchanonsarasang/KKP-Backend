@@ -17,6 +17,8 @@ type CallListItemModel struct {
 	CallOutcome  string     `bson:"call_outcome,omitempty" json:"call_outcome"`
 	PickedUp     *bool      `bson:"picked_up,omitempty" json:"picked_up"`
 	AICategory   string     `bson:"ai_category,omitempty" json:"ai_category"`
+	AIReason     string     `bson:"ai_reason,omitempty" json:"ai_reason"`
+	AIConfidence float64    `bson:"ai_confidence,omitempty" json:"ai_confidence"`
 	NextRetryAt  *time.Time `bson:"next_retry_at,omitempty" json:"next_retry_at"`
 	RetryCount   int        `bson:"retry_count,omitempty" json:"retry_count"`
 	Notes        string     `bson:"notes,omitempty" json:"notes"`
