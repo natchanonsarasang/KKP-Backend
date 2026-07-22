@@ -22,6 +22,7 @@ type ICallListItemsService interface {
 	GetCallListItemByID(id string) (*entities.CallListItemModel, error)
 	GetCallListItemByIDByUser(id string, userID string, workspaceID string) (*entities.CallListItemModel, error)
 	GetCallListItemsByFilterByUser(userID string, filter entities.CallListItemFilter) (*[]entities.CallListItemModel, error)
+	GetCallStatsByDebtor(userID string, workspaceID string) (map[string]entities.DebtorCallStats, error)
 	CreateCallListItem(data entities.CallListItemModel) error
 	CreateCallListItemByUser(userID string, data entities.CallListItemModel) error
 	// System Methods
@@ -145,4 +146,54 @@ func (sv *callListItemsService) GetCallListItemsByFilterByUser(userID string, fi
 	}
 	filter.UserID = userID
 	return sv.CallListItemsRepository.FindByFilter(filter)
+}
+
+// GetCallStatsByDebtor returns, keyed by debtor id, the call summary derived from
+// call_records. The status→bucket mapping mirrors the debtor list UI: a debtor
+// counts as "picked up" when they actually answered (confirmed/declined/
+// no_response/completed, or hanged_up = answered then hung up) and "not picked
+// up" when the line was never really answered (no_answer/failed/rejected/busy/
+// voicemail). Other statuses (e.g. pending, calling) count toward Total only.
+func (sv *callListItemsService) GetCallStatsByDebtor(userID string, workspaceID string) (map[string]entities.DebtorCallStats, error) {
+	if workspaceID == "" {
+		return nil, errors.New("workspace_id must not be empty")
+	}
+
+	rows, err := sv.CallListItemsRepository.AggregateCallStatsByDebtor(workspaceID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	stats := make(map[string]entities.DebtorCallStats)
+	if rows == nil {
+		return stats, nil
+	}
+
+	for _, row := range *rows {
+		if row.DebtorID == "" {
+			continue
+		}
+		s := stats[row.DebtorID]
+		s.Total += row.Count
+
+		switch entities.CallStatus(row.Status) {
+		case entities.StatusConfirmed:
+			s.Confirmed += row.Count
+			s.PickedUp += row.Count
+		case entities.StatusDeclined:
+			s.Declined += row.Count
+			s.PickedUp += row.Count
+		case entities.StatusNoResponse:
+			s.NoResponse += row.Count
+			s.PickedUp += row.Count
+		case entities.StatusCompleted, entities.StatusHangedUp:
+			s.PickedUp += row.Count
+		case entities.StatusNoAnswer, entities.StatusFailed, entities.StatusRejected, entities.StatusBusy, entities.StatusVoicemail:
+			s.NotPickedUp += row.Count
+		}
+
+		stats[row.DebtorID] = s
+	}
+
+	return stats, nil
 }

@@ -273,7 +273,7 @@ When Botnoi calls finish, the webhook handler updates the final transaction stat
 2.  **Update Queue List Item**:
     *   **Update** **`call_list_items`**: Sets final state (`success`/`failed`), `call_outcome`, `picked_up` flag, and raw conversation details inside `notes`.
 3.  **Update Debtor Counters**:
-    *   **Update** **`debtors`**: Increments `picked_up_count`/`not_picked_up_count` and response counts (`accept_count`/`reject_count` based on confirmed/declined outcomes).
+    *   **Update** **`debtors`**: Increments `picked_up_count`/`not_picked_up_count` and updates `last_response` based on the confirmed/declined/other outcome.
 4.  **Update Session Progress**:
     *   **Update** **`call_sessions`**: Increments `completed_calls` or `failed_calls`, and updates `confirmed_calls`.
 5.  **Trigger Next Batch**:

@@ -433,24 +433,20 @@ func (sv *callProcessService) placeCall(
 		var mockStatus entities.CallStatus
 		var mockOutcome string
 		pickedUp := false
-		acceptInc, rejectInc, otherInc := 0, 0, 0
 
 		switch {
 		case r < 0.4:
 			mockStatus = entities.StatusConfirmed
 			mockOutcome = "ยืนยันชำระ"
 			pickedUp = true
-			acceptInc = 1
 		case r < 0.6:
 			mockStatus = entities.StatusDeclined
 			mockOutcome = "ปฏิเสธ"
 			pickedUp = true
-			rejectInc = 1
 		case r < 0.8:
 			mockStatus = entities.StatusNoResponse
 			mockOutcome = "ไม่ตอบ"
 			pickedUp = true
-			otherInc = 1
 		case r < 0.9:
 			mockStatus = entities.StatusNoAnswer
 			mockOutcome = "ไม่รับสาย"
@@ -480,9 +476,6 @@ func (sv *callProcessService) placeCall(
 			SuccessfulContacts: debtor.SuccessfulContacts,
 			PickedUpCount:      debtor.PickedUpCount,
 			NotPickedUpCount:   debtor.NotPickedUpCount,
-			AcceptCount:        debtor.AcceptCount,
-			RejectCount:        debtor.RejectCount,
-			OtherCount:         debtor.OtherCount,
 			LastContactAt:      &nowTime,
 			LastResponse:       mockOutcome,
 			CallOutcome:        string(mockStatus),
@@ -493,15 +486,6 @@ func (sv *callProcessService) placeCall(
 			stats.SuccessfulContacts = debtor.SuccessfulContacts + 1
 		} else {
 			stats.NotPickedUpCount = debtor.NotPickedUpCount + 1
-		}
-		if acceptInc > 0 {
-			stats.AcceptCount = debtor.AcceptCount + 1
-		}
-		if rejectInc > 0 {
-			stats.RejectCount = debtor.RejectCount + 1
-		}
-		if otherInc > 0 {
-			stats.OtherCount = debtor.OtherCount + 1
 		}
 		sv.DebtorsRepository.UpdateStats(item.DebtorID, stats)
 
@@ -597,9 +581,6 @@ func (sv *callProcessService) placeCall(
 		SuccessfulContacts: debtor.SuccessfulContacts,
 		PickedUpCount:      debtor.PickedUpCount,
 		NotPickedUpCount:   debtor.NotPickedUpCount,
-		AcceptCount:        debtor.AcceptCount,
-		RejectCount:        debtor.RejectCount,
-		OtherCount:         debtor.OtherCount,
 		LastContactAt:      &nowTimeUTC,
 		LastResponse:       debtor.LastResponse,
 		CallOutcome:        debtor.CallOutcome,
