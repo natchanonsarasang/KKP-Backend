@@ -73,7 +73,7 @@ func (sv *voicebotMakeCallService) MakeCall(data entities.VoicebotMakeCallDataMo
 		 AgentPhoneNumber: "0800000000",
 		 Speed:            "1",
 		 TTS:              "voicebot-premium",
-		 ASRProvider:      "botnoi-aws-th-noise-classifier-v17c",
+		 ASRProvider:      "botnoi-th-noise-classifier-C",
 		 ASRLanguageCode:  "th",
 		 ASRTimeout:       5,
 		 FalseTimeoutSec:  "1",

@@ -525,7 +525,7 @@ func (sv *callProcessService) placeCall(
 		 AgentPhoneNumber: "0800000000",
 		 Speed:            "1",
 		 TTS:              "voicebot-premium",
-		 ASRProvider:      asrProvider,
+		 ASRProvider:      "botnoi-th-noise-classifier-C",
 		 ASRLanguageCode:  "th",
 		 ASRTimeout:       5,
 		 FalseTimeoutSec:  "1",
