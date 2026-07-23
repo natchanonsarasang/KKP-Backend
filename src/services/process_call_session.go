@@ -493,6 +493,9 @@ func (sv *callProcessService) placeCall(
 	}
 
 	vars := prepareDebtorVariables(debtor.Variables)
+	// Fill missing variables from debtor columns / mock defaults so incomplete
+	// debtor data never produces a broken flow.
+	vars = applyDefaultCallVariables(vars, &debtor)
 	vars["bot_type"] = "{{in_init_conversation}}"
 	vars["intent"] = "{{in_init_conversation}}"
 
@@ -505,6 +508,7 @@ func (sv *callProcessService) placeCall(
 		Flow: buildFlow(outboundID,
 			vars["name"],
 			vars["car_detail"],
+			vars["province"],
 			vars["total_debt"],
 			vars["total_interest"],
 			vars["total_fine"],
