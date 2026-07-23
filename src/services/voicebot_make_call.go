@@ -38,6 +38,9 @@ func (sv *voicebotMakeCallService) MakeCall(data entities.VoicebotMakeCallDataMo
 		data.EventID = fmt.Sprintf("event_%d", time.Now().UnixMilli())
 	}
 	variables := prepareVoicebotVariables(data.Variables)
+	// Fill missing variables with mock defaults so a call with incomplete (or
+	// absent) variables still works.
+	variables = applyDefaultVoicebotVariables(variables)
 	variables["bot_type"] = "in_init_conversation"
 	variables["intent"] = "in_init_conversation"
 
@@ -53,6 +56,7 @@ func (sv *voicebotMakeCallService) MakeCall(data entities.VoicebotMakeCallDataMo
 		Flow: buildFlow(data.OutboundID,
 			getStringVal(variables, "name"),
 			getStringVal(variables, "car_detail"),
+			getStringVal(variables, "province"),
 			getStringVal(variables, "total_debt"),
 			getStringVal(variables, "total_interest"),
 			getStringVal(variables, "total_fine"),
@@ -95,9 +99,8 @@ func validateVoicebotMakeCall(data entities.VoicebotMakeCallDataModel) error {
 	if data.PhoneNumber == "" {
 		return errors.New("phone_number is required")
 	}
-	if data.Variables == nil {
-		return errors.New("variables is required")
-	}
+	// Variables may be nil/partial — missing keys fall back to
+	// defaultCallVariables so the call still works.
 	return nil
 }
 
@@ -137,12 +140,13 @@ func prepareVoicebotVariables(input map[string]any) map[string]any {
 }
 
 func buildFlow(outboundID string, name string,
-	carDetail string, totalDebt string, totalInterest string, totalFine string,
+	carDetail string, province string, totalDebt string, totalInterest string, totalFine string,
 	overdueInstallment string, botType string, intent string) string {
 	flow := fmt.Sprintf(
 		"<!outbound_id|%s!>|||"+
 			"<!customer_name|%s!>|||"+
 			"<!car_detail|%s!>|||"+
+			"<!province|%s!>|||"+
 			"<!total_debt|%s!>|||"+
 			"<!total_interest|%s!>|||"+
 			"<!total_fine|%s!>|||"+
@@ -150,7 +154,7 @@ func buildFlow(outboundID string, name string,
 			"<!bot_type|%s!>|||"+
 			"<!intent|%s!>|||"+
 			"{{in_init_conversation}}",
-		outboundID, name, carDetail, totalDebt, totalInterest, totalFine, overdueInstallment, botType, intent)
+		outboundID, name, carDetail, province, totalDebt, totalInterest, totalFine, overdueInstallment, botType, intent)
 
 	return flow
 }
