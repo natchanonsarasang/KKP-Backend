@@ -33,13 +33,23 @@ func TestVoicebotMakeCallService_Validation(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "phone_number is required", err.Error())
 
-	// Case 2: Nil variables map
+	// Case 2: Nil variables map — no longer an error; the call proceeds with
+	// the mock defaults from defaultCallVariables.
+	var capturedPayload entities.OutboundBotnoiDataModel
+	mockClient.MakeCallFunc = func(payload entities.OutboundBotnoiDataModel) error {
+		capturedPayload = payload
+		return nil
+	}
 	err = svc.MakeCall(entities.VoicebotMakeCallDataModel{
 		PhoneNumber: "0909722021",
 		Variables:   nil,
 	})
-	assert.Error(t, err)
-	assert.Equal(t, "variables is required", err.Error())
+	assert.NoError(t, err)
+	assert.Contains(t, capturedPayload.Flow, "<!customer_name|คุณสมชาย!>")
+	assert.Contains(t, capturedPayload.Flow, "<!car_detail|กก1111!>")
+	assert.Contains(t, capturedPayload.Flow, "<!province|กรุงเทพมหานคร!>")
+	assert.Contains(t, capturedPayload.Flow, "<!total_debt|3000!>")
+	assert.Contains(t, capturedPayload.Flow, "<!overdue_installment|2!>")
 }
 
 func TestVoicebotMakeCallService_MakeCall(t *testing.T) {
