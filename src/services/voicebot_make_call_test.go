@@ -89,6 +89,53 @@ func TestVoicebotMakeCallService_MakeCall(t *testing.T) {
 	assert.Contains(t, capturedPayload.Flow, "<!overdue_installment|3!>")
 }
 
+func TestSplitCarDetail(t *testing.T) {
+	cases := []struct {
+		name         string
+		raw          string
+		wantPlate    string
+		wantProvince string
+	}{
+		{"plate and province", "ฅฆ 9091 ประจวบคีรีขันธ์", "ฅฆ 9091", "ประจวบคีรีขันธ์"},
+		{"new-format plate", "1กก 1234 เชียงใหม่", "1กก 1234", "เชียงใหม่"},
+		{"extra spaces", "  ฅฆ 9091   ประจวบคีรีขันธ์  ", "ฅฆ 9091", "ประจวบคีรีขันธ์"},
+		{"no province", "ฅฆ 9091", "ฅฆ 9091", ""},
+		{"no digits", "รถเก๋ง", "รถเก๋ง", ""},
+		{"empty", "", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			plate, province := splitCarDetail(tc.raw)
+			assert.Equal(t, tc.wantPlate, plate)
+			assert.Equal(t, tc.wantProvince, province)
+		})
+	}
+}
+
+// When car_detail carries a province, the built flow must expose the plate and
+// province as two separate variables.
+func TestVoicebotMakeCall_SplitsCarDetailIntoProvince(t *testing.T) {
+	var capturedPayload entities.OutboundBotnoiDataModel
+	mockClient := &mockOutboundBotnoiClient{
+		MakeCallFunc: func(payload entities.OutboundBotnoiDataModel) error {
+			capturedPayload = payload
+			return nil
+		},
+	}
+	svc := &voicebotMakeCallService{outboutClient: mockClient}
+
+	err := svc.MakeCall(entities.VoicebotMakeCallDataModel{
+		PhoneNumber: "0812345678",
+		Variables: map[string]any{
+			"car_detail": "ฅฆ 9091 ประจวบคีรีขันธ์",
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.Contains(t, capturedPayload.Flow, "<!car_detail|ฅฆ 9091!>")
+	assert.Contains(t, capturedPayload.Flow, "<!province|ประจวบคีรีขันธ์!>")
+}
+
 func TestVoicebotMakeCallService_ClientError(t *testing.T) {
 	mockClient := &mockOutboundBotnoiClient{
 		MakeCallFunc: func(payload entities.OutboundBotnoiDataModel) error {

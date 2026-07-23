@@ -6,7 +6,6 @@ import (
 	"go-fiber-template/domain/entities"
 	"go-fiber-template/domain/utils"
 	"go-fiber-template/src/client"
-	"os"
 	"strings"
 	"time"
 )
@@ -53,16 +52,16 @@ func (sv *voicebotMakeCallService) MakeCall(data entities.VoicebotMakeCallDataMo
 		Flow: buildFlow(data.OutboundID,
 			getStringVal(variables, "name"),
 			getStringVal(variables, "car_detail"),
+			getStringVal(variables, "province"),
 			getStringVal(variables, "total_debt"),
 			getStringVal(variables, "total_interest"),
 			getStringVal(variables, "total_fine"),
 			getStringVal(variables, "overdue_installment"),
-			getStringVal(variables, "bot_type"),
 			getStringVal(variables, "intent")),
 		PhoneNumber: data.PhoneNumber,
 		BotID:       "6a06964fb875327d960f05f0",
-		BotType:     os.Getenv("BOT_TYPE"),
-		Intent:      "in_init_conversation",
+		//BotType:     os.Getenv("BOT_TYPE"),
+		//Intent:      "in_init_conversation",
 		// The partner /outbound contract only requires outbound_id, phonenumber,
 		// flow, bot_id. The extra call-config fields below are kept (commented)
 		// for future use — re-enable if the partner API stops applying defaults.
@@ -130,6 +129,15 @@ func prepareVoicebotVariables(input map[string]any) map[string]any {
 		}
 	}
 
+	// Split the combined "car_detail" (plate + province, e.g.
+	// "ฅฆ 9091 ประจวบคีรีขันธ์") into the plate and a separate "province"
+	// variable so the bot can read them independently.
+	if carDetail := getStringVal(variables, "car_detail"); carDetail != "" {
+		plate, province := splitCarDetail(carDetail)
+		variables["car_detail"] = plate
+		variables["province"] = province
+	}
+
 	date_today := utils.ThaiTodayString()
 	variables["date_today"] = date_today
 
@@ -137,20 +145,20 @@ func prepareVoicebotVariables(input map[string]any) map[string]any {
 }
 
 func buildFlow(outboundID string, name string,
-	carDetail string, totalDebt string, totalInterest string, totalFine string,
-	overdueInstallment string, botType string, intent string) string {
+	carDetail string, province string, totalDebt string, totalInterest string, totalFine string,
+	overdueInstallment string, intent string) string {
 	flow := fmt.Sprintf(
 		"<!outbound_id|%s!>|||"+
 			"<!customer_name|%s!>|||"+
 			"<!car_detail|%s!>|||"+
+			"<!province|%s!>|||"+
 			"<!total_debt|%s!>|||"+
 			"<!total_interest|%s!>|||"+
 			"<!total_fine|%s!>|||"+
 			"<!overdue_installment|%s!>|||"+
-			"<!bot_type|%s!>|||"+
 			"<!intent|%s!>|||"+
 			"{{in_init_conversation}}",
-		outboundID, name, carDetail, totalDebt, totalInterest, totalFine, overdueInstallment, botType, intent)
+		outboundID, name, carDetail, province, totalDebt, totalInterest, totalFine, overdueInstallment, intent)
 
 	return flow
 }

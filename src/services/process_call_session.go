@@ -108,8 +108,34 @@ func prepareDebtorVariables(input map[string]string) map[string]string {
 		}
 	}
 
+	// The user uploads the plate + province as one combined "car_detail" field
+	// (e.g. "ฅฆ 9091 ประจวบคีรีขันธ์"); the bot needs them as two separate
+	// variables, so split car_detail into the plate and a "province" variable.
+	if carDetail, ok := vars["car_detail"]; ok {
+		plate, province := splitCarDetail(carDetail)
+		vars["car_detail"] = plate
+		vars["province"] = province
+	}
+
 	vars["date_today"] = formatThaiDate(time.Now())
 	return vars
+}
+
+// splitCarDetail splits a combined vehicle-plate string like
+// "ฅฆ 9091 ประจวบคีรีขันธ์" into the plate ("ฅฆ 9091") and the province
+// ("ประจวบคีรีขันธ์"). The split point is the last digit, since the plate
+// always ends in its number and the province follows. If the input has no
+// digit (nothing to split on) the whole string is returned as the plate and
+// province is empty.
+func splitCarDetail(raw string) (plate, province string) {
+	raw = strings.TrimSpace(raw)
+	lastDigit := strings.LastIndexAny(raw, "0123456789")
+	if lastDigit < 0 {
+		return raw, ""
+	}
+	plate = strings.TrimSpace(raw[:lastDigit+1])
+	province = strings.TrimSpace(raw[lastDigit+1:])
+	return plate, province
 }
 
 // formatThaiDate formats a date in Thai Buddhist-era style, e.g. "วันจันทร์ ที่ 17 มิถุนายน 2569".
@@ -505,16 +531,16 @@ func (sv *callProcessService) placeCall(
 		Flow: buildFlow(outboundID,
 			vars["name"],
 			vars["car_detail"],
+			vars["province"],
 			vars["total_debt"],
 			vars["total_interest"],
 			vars["total_fine"],
 			vars["overdue_installment"],
-			vars["bot_type"],
 			vars["intent"]),
 		PhoneNumber: "3525" + debtor.PhoneNumber,
 		BotID:       os.Getenv("BOT_ID"),
-		BotType:     os.Getenv("BOT_TYPE"),
-		Intent:      "in_init_conversation",
+		//BotType:     os.Getenv("BOT_TYPE"),
+		//Intent:      "in_init_conversation",
 		// The partner /outbound contract only requires outbound_id, phonenumber,
 		// flow, bot_id. The extra call-config fields below are kept (commented)
 		// for future use — re-enable if the partner API stops applying defaults.
