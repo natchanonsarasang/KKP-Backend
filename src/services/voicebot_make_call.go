@@ -37,6 +37,9 @@ func (sv *voicebotMakeCallService) MakeCall(data entities.VoicebotMakeCallDataMo
 		data.EventID = fmt.Sprintf("event_%d", time.Now().UnixMilli())
 	}
 	variables := prepareVoicebotVariables(data.Variables)
+	// Fill missing variables with mock defaults so a call with incomplete (or
+	// absent) variables still works.
+	variables = applyDefaultVoicebotVariables(variables)
 	variables["bot_type"] = "in_init_conversation"
 	variables["intent"] = "in_init_conversation"
 
@@ -94,9 +97,8 @@ func validateVoicebotMakeCall(data entities.VoicebotMakeCallDataModel) error {
 	if data.PhoneNumber == "" {
 		return errors.New("phone_number is required")
 	}
-	if data.Variables == nil {
-		return errors.New("variables is required")
-	}
+	// Variables may be nil/partial — missing keys fall back to
+	// defaultCallVariables so the call still works.
 	return nil
 }
 
