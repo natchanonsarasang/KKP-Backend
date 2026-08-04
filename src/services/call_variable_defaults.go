@@ -41,6 +41,36 @@ func normalizeAmountToThai(raw string) string {
 	return cleaned
 }
 
+// moneyVariableKeys are the flow variables that carry a baht amount and must be
+// spoken as Thai baht/satang. overdue_installment is deliberately excluded — it
+// is a count of installments, not money.
+var moneyVariableKeys = []string{"total_debt", "total_interest", "total_fine"}
+
+// normalizeMoneyVariables converts any money field that arrived as a bare number
+// (e.g. "1000.5", or a JSON number the caller sent) into spoken Thai baht/satang.
+// It runs on the FINAL value regardless of where it came from — request payload,
+// debtor column, or mock default — because a number reaches Botnoi as literal
+// "point five" otherwise. Values already in spoken Thai form pass through
+// unchanged (normalizeAmountToThai only converts numeric input), so it is safe to
+// call unconditionally and is idempotent.
+func normalizeMoneyVariables(vars map[string]string) {
+	for _, k := range moneyVariableKeys {
+		if v := strings.TrimSpace(vars[k]); v != "" {
+			vars[k] = normalizeAmountToThai(v)
+		}
+	}
+}
+
+// normalizeMoneyVariablesAny is the map[string]any counterpart for the direct
+// make-call path, where a money field may arrive as a JSON number (float64).
+func normalizeMoneyVariablesAny(vars map[string]any) {
+	for _, k := range moneyVariableKeys {
+		if v := strings.TrimSpace(getStringVal(vars, k)); v != "" {
+			vars[k] = normalizeAmountToThai(v)
+		}
+	}
+}
+
 // defaultCallVariables are the base/mock values (mirroring cmd/seed) used when a
 // debtor is missing a variable the call flow needs. Every key consumed by
 // buildFlow must have an entry here so a call can always be placed. Edit this
@@ -96,6 +126,9 @@ func applyDefaultCallVariables(vars map[string]string, debtor *entities.DebtorMo
 			vars[key] = def
 		}
 	}
+
+	// Speak every money field as Thai baht/satang, whatever its source.
+	normalizeMoneyVariables(vars)
 	return vars
 }
 
@@ -118,5 +151,8 @@ func applyDefaultVoicebotVariables(variables map[string]any) map[string]any {
 			variables[key] = def
 		}
 	}
+
+	// Speak every money field as Thai baht/satang, whatever its source.
+	normalizeMoneyVariablesAny(variables)
 	return variables
 }
