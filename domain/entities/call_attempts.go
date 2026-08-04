@@ -18,6 +18,10 @@ type CallAttemptModel struct {
 	AiReason        string             `bson:"ai_reason,omitempty" json:"ai_reason"`
 	AiConfidence    float64            `bson:"ai_confidence,omitempty" json:"ai_confidence"`
 	ConversationLog string             `bson:"conversation_log,omitempty" json:"conversation_log"`
+	// EditedConversationLog is a user-editable copy of ConversationLog. The
+	// webhook never writes it — it is only set via the update endpoint from the
+	// UI, so the original ConversationLog stays intact as the source of truth.
+	EditedConversationLog string       `bson:"edited_conversation_log,omitempty" json:"edited_conversation_log"`
 	AudioURL        string             `bson:"audio_url,omitempty" json:"audio_url"`
 	CallDuration    int                `bson:"call_duration,omitempty" json:"call_duration"`
 	ErrorReason     string             `bson:"error_reason,omitempty" json:"error_reason"`
