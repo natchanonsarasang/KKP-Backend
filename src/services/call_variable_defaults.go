@@ -1,11 +1,45 @@
 package services
 
 import (
+	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
 	"go-fiber-template/domain/entities"
 )
+
+// formatThaiBahtSatang renders a numeric amount as spoken Thai baht/satang, e.g.
+// 1000.5 -> "1000 บาท 50 สตางค์" and 3000 -> "3000 บาท". Satang is TRUNCATED, not
+// rounded: 0.999 -> "0 บาท 99 สตางค์" (never rounds a satang up into a baht). The
+// tiny epsilon absorbs binary float error so an amount stored as e.g. 0.28999…
+// still yields 29 สตางค์.
+func formatThaiBahtSatang(amount float64) string {
+	if amount < 0 {
+		amount = 0
+	}
+	totalSatang := int64(math.Floor(amount*100 + 1e-6))
+	baht := totalSatang / 100
+	satang := totalSatang % 100
+	if satang == 0 {
+		return fmt.Sprintf("%d บาท", baht)
+	}
+	return fmt.Sprintf("%d บาท %d สตางค์", baht, satang)
+}
+
+// normalizeAmountToThai converts a raw amount string into spoken Thai baht/satang
+// when it is numeric (e.g. "1,000.5" -> "1000 บาท 50 สตางค์"). A non-numeric value
+// is assumed to already be in spoken form and is returned unchanged (minus commas).
+func normalizeAmountToThai(raw string) string {
+	cleaned := strings.ReplaceAll(strings.TrimSpace(raw), ",", "")
+	if cleaned == "" {
+		return cleaned
+	}
+	if f, err := strconv.ParseFloat(cleaned, 64); err == nil {
+		return formatThaiBahtSatang(f)
+	}
+	return cleaned
+}
 
 // defaultCallVariables are the base/mock values (mirroring cmd/seed) used when a
 // debtor is missing a variable the call flow needs. Every key consumed by
@@ -44,14 +78,16 @@ func applyDefaultCallVariables(vars map[string]string, debtor *entities.DebtorMo
 	}
 	if strings.TrimSpace(vars["total_debt"]) == "" {
 		// Mirror DebtorDisplayAmount: accept the frontend's amount aliases first.
+		// These are numeric strings, so speak them as Thai baht/satang rather than
+		// sending a bare "1000.5" that Botnoi would read as "point five".
 		for _, key := range []string{"amount", "outstanding_amount"} {
 			if raw := strings.TrimSpace(vars[key]); raw != "" {
-				vars["total_debt"] = strings.ReplaceAll(raw, ",", "")
+				vars["total_debt"] = normalizeAmountToThai(raw)
 				break
 			}
 		}
 		if strings.TrimSpace(vars["total_debt"]) == "" && debtor != nil && debtor.TotalDebt > 0 {
-			vars["total_debt"] = strconv.FormatFloat(debtor.TotalDebt, 'f', -1, 64)
+			vars["total_debt"] = formatThaiBahtSatang(debtor.TotalDebt)
 		}
 	}
 
@@ -72,7 +108,7 @@ func applyDefaultVoicebotVariables(variables map[string]any) map[string]any {
 	if strings.TrimSpace(getStringVal(variables, "total_debt")) == "" {
 		for _, key := range []string{"amount", "outstanding_amount"} {
 			if raw := strings.TrimSpace(getStringVal(variables, key)); raw != "" {
-				variables["total_debt"] = strings.ReplaceAll(raw, ",", "")
+				variables["total_debt"] = normalizeAmountToThai(raw)
 				break
 			}
 		}
