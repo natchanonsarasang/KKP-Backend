@@ -15,9 +15,10 @@ func TestApplyDefaultCallVariables_NilVarsNilDebtor(t *testing.T) {
 	assert.Equal(t, "คุณสมชาย", vars["name"])
 	assert.Equal(t, "กก1111", vars["car_detail"])
 	assert.Equal(t, "กรุงเทพมหานคร", vars["province"])
-	assert.Equal(t, "3000", vars["total_debt"])
-	assert.Equal(t, "300", vars["total_interest"])
-	assert.Equal(t, "500", vars["total_fine"])
+	// Money defaults are spoken as Thai baht too; the installment count is not.
+	assert.Equal(t, "3000 บาท", vars["total_debt"])
+	assert.Equal(t, "300 บาท", vars["total_interest"])
+	assert.Equal(t, "500 บาท", vars["total_fine"])
 	assert.Equal(t, "2", vars["overdue_installment"])
 }
 
@@ -47,9 +48,28 @@ func TestApplyDefaultCallVariables_ExistingVarsUntouched(t *testing.T) {
 	}, debtor)
 
 	assert.Equal(t, "คุณลูกค้าจริง", vars["name"])
-	assert.Equal(t, "3000", vars["total_debt"])
+	// A provided bare number is still spoken as baht (the reported bug fix).
+	assert.Equal(t, "3000 บาท", vars["total_debt"])
 	assert.Equal(t, "Toyota Vios", vars["car_detail"])
 	assert.Equal(t, "เชียงใหม่", vars["province"])
+}
+
+// The reported bug: total_debt provided directly as a bare decimal must be
+// spoken as baht/satang, not passed through as "1000.5".
+func TestApplyDefaultCallVariables_ProvidedNumericDebtIsSpoken(t *testing.T) {
+	vars := applyDefaultCallVariables(map[string]string{
+		"total_debt": "1000.5",
+	}, nil)
+	assert.Equal(t, "1000 บาท 50 สตางค์", vars["total_debt"])
+}
+
+// Direct make-call path: a JSON number (float64) for total_debt must also be
+// spoken, not read literally.
+func TestApplyDefaultVoicebotVariables_ProvidedNumericDebtIsSpoken(t *testing.T) {
+	vars := applyDefaultVoicebotVariables(map[string]any{
+		"total_debt": 1000.5,
+	})
+	assert.Equal(t, "1000 บาท 50 สตางค์", vars["total_debt"])
 }
 
 func TestApplyDefaultCallVariables_AmountAliases(t *testing.T) {
@@ -100,5 +120,5 @@ func TestApplyDefaultVoicebotVariables(t *testing.T) {
 	assert.Equal(t, "4000 บาท", vars["total_debt"])
 	assert.Equal(t, "กก1111", vars["car_detail"])
 	assert.Equal(t, "กรุงเทพมหานคร", vars["province"])
-	assert.Equal(t, "300", vars["total_interest"])
+	assert.Equal(t, "300 บาท", vars["total_interest"])
 }
