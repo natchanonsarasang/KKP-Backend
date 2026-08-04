@@ -48,7 +48,7 @@ func TestVoicebotMakeCallService_Validation(t *testing.T) {
 	assert.Contains(t, capturedPayload.Flow, "<!customer_name|คุณสมชาย!>")
 	assert.Contains(t, capturedPayload.Flow, "<!car_detail|กก1111!>")
 	assert.Contains(t, capturedPayload.Flow, "<!province|กรุงเทพมหานคร!>")
-	assert.Contains(t, capturedPayload.Flow, "<!total_debt|3000!>")
+	assert.Contains(t, capturedPayload.Flow, "<!total_debt|3000 บาท!>")
 	assert.Contains(t, capturedPayload.Flow, "<!overdue_installment|2!>")
 }
 
@@ -91,11 +91,13 @@ func TestVoicebotMakeCallService_MakeCall(t *testing.T) {
 	assert.Equal(t, "0.1", capturedPayload.FalseSilenceSec)
 	assert.Equal(t, "True", capturedPayload.Interruptible)
 
-	// Verify buildFlow carries the new debt-collection variables through as-is.
+	// Verify buildFlow carries the debt-collection variables through, with money
+	// fields spoken as Thai baht/satang (never bare decimals like "1500.5").
 	assert.Contains(t, capturedPayload.Flow, "สมชาย")
 	assert.Contains(t, capturedPayload.Flow, "Toyota Vios กข1234")
-	assert.Contains(t, capturedPayload.Flow, "1500.5")
-	assert.Contains(t, capturedPayload.Flow, "<!total_interest|120.25!>")
+	assert.Contains(t, capturedPayload.Flow, "<!total_debt|1500 บาท 50 สตางค์!>")
+	assert.Contains(t, capturedPayload.Flow, "<!total_interest|120 บาท 25 สตางค์!>")
+	assert.Contains(t, capturedPayload.Flow, "<!total_fine|50 บาท!>")
 	assert.Contains(t, capturedPayload.Flow, "<!overdue_installment|3!>")
 }
 
