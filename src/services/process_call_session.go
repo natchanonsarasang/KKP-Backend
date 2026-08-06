@@ -519,9 +519,9 @@ func (sv *callProcessService) placeCall(
 	}
 
 	vars := prepareDebtorVariables(debtor.Variables)
-	// Fill missing variables from debtor columns / mock defaults so incomplete
-	// debtor data never produces a broken flow.
-	vars = applyDefaultCallVariables(vars, &debtor)
+	// Only the debtor's own variables are sent — an unfilled field stays empty and
+	// the bot reads nothing there. Money fields are spoken as Thai baht/satang.
+	normalizeMoneyVariables(vars)
 	vars["bot_type"] = "{{in_init_conversation}}"
 	vars["intent"] = "{{in_init_conversation}}"
 
