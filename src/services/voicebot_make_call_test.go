@@ -33,8 +33,8 @@ func TestVoicebotMakeCallService_Validation(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "phone_number is required", err.Error())
 
-	// Case 2: Nil variables map — no longer an error; the call proceeds with
-	// the mock defaults from defaultCallVariables.
+	// Case 2: Nil variables map — no longer an error; the call proceeds with every
+	// flow field empty (no mock defaults are filled in).
 	var capturedPayload entities.OutboundBotnoiDataModel
 	mockClient.MakeCallFunc = func(payload entities.OutboundBotnoiDataModel) error {
 		capturedPayload = payload
@@ -45,11 +45,11 @@ func TestVoicebotMakeCallService_Validation(t *testing.T) {
 		Variables:   nil,
 	})
 	assert.NoError(t, err)
-	assert.Contains(t, capturedPayload.Flow, "<!customer_name|คุณสมชาย!>")
-	assert.Contains(t, capturedPayload.Flow, "<!car_detail|กก1111!>")
-	assert.Contains(t, capturedPayload.Flow, "<!province|กรุงเทพมหานคร!>")
-	assert.Contains(t, capturedPayload.Flow, "<!total_debt|3000 บาท!>")
-	assert.Contains(t, capturedPayload.Flow, "<!overdue_installment|2!>")
+	assert.Contains(t, capturedPayload.Flow, "<!customer_name|!>")
+	assert.Contains(t, capturedPayload.Flow, "<!car_detail|!>")
+	assert.Contains(t, capturedPayload.Flow, "<!province|!>")
+	assert.Contains(t, capturedPayload.Flow, "<!total_debt|!>")
+	assert.Contains(t, capturedPayload.Flow, "<!overdue_installment|!>")
 }
 
 func TestVoicebotMakeCallService_MakeCall(t *testing.T) {
