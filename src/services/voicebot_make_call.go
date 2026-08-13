@@ -38,8 +38,10 @@ func (sv *voicebotMakeCallService) MakeCall(data entities.VoicebotMakeCallDataMo
 	}
 	variables := prepareVoicebotVariables(data.Variables)
 	// Only the caller's own variables are sent — an unfilled field stays empty and
-	// the bot reads nothing there. Money fields are spoken as Thai baht/satang.
-	normalizeMoneyVariablesAny(variables)
+	// the bot reads nothing there. The bot script no longer carries the unit words,
+	// so we format them here: amounts as Thai baht/satang (interest/fine prefixed
+	// with their label and dropped when zero), installments suffixed with "งวด".
+	applyFlowVariablesAny(variables)
 	variables["bot_type"] = "in_init_conversation"
 	variables["intent"] = "in_init_conversation"
 
