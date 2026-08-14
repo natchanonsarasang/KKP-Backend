@@ -39,30 +39,59 @@ func normalizeAmountToThai(raw string) string {
 	return cleaned
 }
 
-// moneyVariableKeys are the flow variables that carry a baht amount and must be
-// spoken as Thai baht/satang. overdue_installment is deliberately excluded — it
-// is a count of installments, not money.
-var moneyVariableKeys = []string{"total_debt", "total_interest", "total_fine"}
+// isBlankAmount reports whether a money field carries no meaningful value and
+// should be dropped entirely — empty, "-", or a value that is 0. This lets the
+// caller omit the whole clause (label included) instead of the bot reading a
+// pointless "ดอกเบี้ย 0 บาท".
+func isBlankAmount(raw string) bool {
+	s := strings.TrimSpace(raw)
+	if s == "" || s == "-" {
+		return true
+	}
+	if f, err := strconv.ParseFloat(strings.ReplaceAll(s, ",", ""), 64); err == nil {
+		return f == 0
+	}
+	return false
+}
 
-// normalizeMoneyVariables converts any money field that arrived as a bare number
-// (e.g. "1000.5") into spoken Thai baht/satang, in place. Empty fields are left
-// empty — nothing is filled in on the caller's behalf. Values already in spoken
-// Thai form pass through unchanged (normalizeAmountToThai only converts numeric
-// input), so it is safe to call unconditionally and is idempotent.
-func normalizeMoneyVariables(vars map[string]string) {
-	for _, k := range moneyVariableKeys {
-		if v := strings.TrimSpace(vars[k]); v != "" {
-			vars[k] = normalizeAmountToThai(v)
-		}
+// labeledAmount returns "<label> <spoken amount>" (e.g. "ดอกเบี้ย 100 บาท 30 สตางค์"),
+// or "" when the amount is blank/zero so the bot skips the label entirely.
+func labeledAmount(label, raw string) string {
+	if isBlankAmount(raw) {
+		return ""
+	}
+	return label + " " + normalizeAmountToThai(raw)
+}
+
+// applyFlowVariables formats the amount/count flow variables to the exact spoken
+// text the bot expects, IN PLACE. The bot script no longer carries the unit words,
+// so the backend now supplies them:
+//   - total_debt          -> Thai baht/satang (the script keeps its own label)
+//   - total_interest      -> "ดอกเบี้ย <amount>", omitted entirely when zero/blank
+//   - total_fine          -> "เบี้ยปรับ <amount>", omitted entirely when zero/blank
+//   - overdue_installment -> "<n>งวด", empty stays empty
+//
+// Any field left empty is sent empty so the bot reads nothing there.
+func applyFlowVariables(vars map[string]string) {
+	if v := strings.TrimSpace(vars["total_debt"]); v != "" {
+		vars["total_debt"] = normalizeAmountToThai(v)
+	}
+	vars["total_interest"] = labeledAmount("ดอกเบี้ย", vars["total_interest"])
+	vars["total_fine"] = labeledAmount("เบี้ยปรับ", vars["total_fine"])
+	if v := strings.TrimSpace(vars["overdue_installment"]); v != "" {
+		vars["overdue_installment"] = v + "งวด"
 	}
 }
 
-// normalizeMoneyVariablesAny is the map[string]any counterpart for the direct
-// make-call path, where a money field may arrive as a JSON number (float64).
-func normalizeMoneyVariablesAny(vars map[string]any) {
-	for _, k := range moneyVariableKeys {
-		if v := strings.TrimSpace(getStringVal(vars, k)); v != "" {
-			vars[k] = normalizeAmountToThai(v)
-		}
+// applyFlowVariablesAny is the map[string]any counterpart for the direct make-call
+// path, where a value may arrive as a JSON number (float64).
+func applyFlowVariablesAny(vars map[string]any) {
+	if v := strings.TrimSpace(getStringVal(vars, "total_debt")); v != "" {
+		vars["total_debt"] = normalizeAmountToThai(v)
+	}
+	vars["total_interest"] = labeledAmount("ดอกเบี้ย", getStringVal(vars, "total_interest"))
+	vars["total_fine"] = labeledAmount("เบี้ยปรับ", getStringVal(vars, "total_fine"))
+	if v := strings.TrimSpace(getStringVal(vars, "overdue_installment")); v != "" {
+		vars["overdue_installment"] = v + "งวด"
 	}
 }

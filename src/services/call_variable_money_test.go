@@ -24,36 +24,65 @@ func TestFormatThaiBahtSatang(t *testing.T) {
 	}
 }
 
-func TestNormalizeMoneyVariables_SpeaksNumbersLeavesRest(t *testing.T) {
+// The bot script carries no unit words, so the backend supplies them: amounts as
+// baht/satang, interest/fine with their label, installments with "งวด".
+func TestApplyFlowVariables(t *testing.T) {
 	vars := map[string]string{
-		"total_debt":          "1000.5",              // bare number -> spoken
-		"total_interest":      "1,234.50",            // commas stripped -> spoken
-		"total_fine":          "500 บาท",             // already spoken -> untouched
-		"overdue_installment": "2",                   // not money -> untouched
-		"name":                "คุณลูกค้า",           // not money -> untouched
+		"total_debt":          "1000.5",
+		"total_interest":      "100.3",
+		"total_fine":          "500",
+		"overdue_installment": "2",
+		"name":                "คุณลูกค้า", // untouched
 	}
-	normalizeMoneyVariables(vars)
+	applyFlowVariables(vars)
 
 	assert.Equal(t, "1000 บาท 50 สตางค์", vars["total_debt"])
-	assert.Equal(t, "1234 บาท 50 สตางค์", vars["total_interest"])
-	assert.Equal(t, "500 บาท", vars["total_fine"])
-	assert.Equal(t, "2", vars["overdue_installment"])
+	assert.Equal(t, "ดอกเบี้ย 100 บาท 30 สตางค์", vars["total_interest"])
+	assert.Equal(t, "เบี้ยปรับ 500 บาท", vars["total_fine"])
+	assert.Equal(t, "2งวด", vars["overdue_installment"])
 	assert.Equal(t, "คุณลูกค้า", vars["name"])
 }
 
-// An empty money field is left empty — no default is filled in.
-func TestNormalizeMoneyVariables_EmptyStaysEmpty(t *testing.T) {
-	vars := map[string]string{"total_debt": ""}
-	normalizeMoneyVariables(vars)
-	assert.Equal(t, "", vars["total_debt"])
-	// A field that was never set stays absent.
-	_, ok := vars["total_interest"]
-	assert.False(t, ok)
+// interest/fine with no real value are dropped entirely, so the bot never reads a
+// dangling "ดอกเบี้ย" / "เบี้ยปรับ".
+func TestApplyFlowVariables_BlankInterestFineOmitted(t *testing.T) {
+	for _, blank := range []string{"", "0", "-", "0.00", "  "} {
+		vars := map[string]string{"total_interest": blank, "total_fine": blank}
+		applyFlowVariables(vars)
+		assert.Equal(t, "", vars["total_interest"], "interest=%q", blank)
+		assert.Equal(t, "", vars["total_fine"], "fine=%q", blank)
+	}
 }
 
-// Direct make-call path: a JSON number (float64) for a money field is spoken.
-func TestNormalizeMoneyVariablesAny_JSONNumber(t *testing.T) {
-	vars := map[string]any{"total_debt": 1000.5}
-	normalizeMoneyVariablesAny(vars)
+// An empty installment stays empty — no lone "งวด".
+func TestApplyFlowVariables_EmptyInstallmentStaysEmpty(t *testing.T) {
+	vars := map[string]string{"overdue_installment": ""}
+	applyFlowVariables(vars)
+	assert.Equal(t, "", vars["overdue_installment"])
+}
+
+// Direct make-call path: JSON numbers (float64) are formatted, and a zero fine is
+// dropped.
+func TestApplyFlowVariablesAny_JSONNumbers(t *testing.T) {
+	vars := map[string]any{
+		"total_debt":     1000.5,
+		"total_interest": 100.3,
+		"total_fine":     0, // zero -> omitted
+	}
+	applyFlowVariablesAny(vars)
+
 	assert.Equal(t, "1000 บาท 50 สตางค์", vars["total_debt"])
+	assert.Equal(t, "ดอกเบี้ย 100 บาท 30 สตางค์", vars["total_interest"])
+	assert.Equal(t, "", vars["total_fine"])
+}
+
+func TestIsBlankAmount(t *testing.T) {
+	blank := []string{"", "  ", "-", "0", "0.00", "0.0"}
+	for _, s := range blank {
+		assert.True(t, isBlankAmount(s), "should be blank: %q", s)
+	}
+	real := []string{"100.3", "0.01", "1,000", "-5"}
+	for _, s := range real {
+		assert.False(t, isBlankAmount(s), "should be real: %q", s)
+	}
 }

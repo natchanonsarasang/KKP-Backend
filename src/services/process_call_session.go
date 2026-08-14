@@ -520,8 +520,10 @@ func (sv *callProcessService) placeCall(
 
 	vars := prepareDebtorVariables(debtor.Variables)
 	// Only the debtor's own variables are sent — an unfilled field stays empty and
-	// the bot reads nothing there. Money fields are spoken as Thai baht/satang.
-	normalizeMoneyVariables(vars)
+	// the bot reads nothing there. The bot script no longer carries the unit words,
+	// so we format them here: amounts as Thai baht/satang (interest/fine prefixed
+	// with their label and dropped when zero), installments suffixed with "งวด".
+	applyFlowVariables(vars)
 	vars["bot_type"] = "{{in_init_conversation}}"
 	vars["intent"] = "{{in_init_conversation}}"
 
