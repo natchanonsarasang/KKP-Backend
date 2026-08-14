@@ -91,14 +91,15 @@ func TestVoicebotMakeCallService_MakeCall(t *testing.T) {
 	assert.Equal(t, "0.1", capturedPayload.FalseSilenceSec)
 	assert.Equal(t, "True", capturedPayload.Interruptible)
 
-	// Verify buildFlow carries the debt-collection variables through, with money
-	// fields spoken as Thai baht/satang (never bare decimals like "1500.5").
+	// Verify buildFlow carries the variables through with the units the bot script
+	// no longer supplies: baht/satang amounts, interest/fine with their label, and
+	// installments suffixed with "งวด".
 	assert.Contains(t, capturedPayload.Flow, "สมชาย")
 	assert.Contains(t, capturedPayload.Flow, "Toyota Vios กข1234")
 	assert.Contains(t, capturedPayload.Flow, "<!total_debt|1500 บาท 50 สตางค์!>")
-	assert.Contains(t, capturedPayload.Flow, "<!total_interest|120 บาท 25 สตางค์!>")
-	assert.Contains(t, capturedPayload.Flow, "<!total_fine|50 บาท!>")
-	assert.Contains(t, capturedPayload.Flow, "<!overdue_installment|3!>")
+	assert.Contains(t, capturedPayload.Flow, "<!total_interest|ดอกเบี้ย 120 บาท 25 สตางค์!>")
+	assert.Contains(t, capturedPayload.Flow, "<!total_fine|เบี้ยปรับ 50 บาท!>")
+	assert.Contains(t, capturedPayload.Flow, "<!overdue_installment|3งวด!>")
 }
 
 func TestSplitCarDetail(t *testing.T) {
