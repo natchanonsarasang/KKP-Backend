@@ -146,3 +146,11 @@ func GatewayAudioProxy(gateway HTTPGateway, app *fiber.App) {
 	api := app.Group("/api/v1/audio-proxy", middlewares.SetJWtHeaderHandler())
 	api.Get("/", gateway.AudioProxy)
 }
+
+func GatewayBotnoiLogs(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/botnoi-logs", middlewares.SetJWtHeaderHandler())
+
+	api.Get("/files", gateway.ListBotnoiLogFiles)
+	api.Get("/log", gateway.ReadBotnoiLog)
+	api.Get("/audio", gateway.GetBotnoiAudio)
+}
