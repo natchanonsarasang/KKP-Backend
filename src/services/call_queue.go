@@ -22,6 +22,7 @@ type ICallQueueService interface {
 	// the queue is empty.
 	Head() (map[string]string, error)
 	DeleteByOutboundID(outboundID string) error
+	DeleteByCallListItemID(callListItemID string) error
 }
 
 func NewCallQueueService(repo repositories.ICallQueueRepository) ICallQueueService {
@@ -62,6 +63,10 @@ func (sv *callQueueService) Head() (map[string]string, error) {
 
 func (sv *callQueueService) DeleteByOutboundID(outboundID string) error {
 	return sv.CallQueueRepository.DeleteByOutboundID(outboundID)
+}
+
+func (sv *callQueueService) DeleteByCallListItemID(callListItemID string) error {
+	return sv.CallQueueRepository.DeleteByCallListItemID(callListItemID)
 }
 
 // buildKKPVariables produces the flat variable map served to the V2 voicebot's
