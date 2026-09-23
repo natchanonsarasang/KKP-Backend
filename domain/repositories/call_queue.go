@@ -24,6 +24,10 @@ type ICallQueueRepository interface {
 	// freshly-placed call's row is still the one served.
 	FindHead() (*entities.CallQueueModel, error)
 	DeleteByOutboundID(outboundID string) error
+	// DeleteByCallListItemID removes a queue row by its call_list_item_id. Used by
+	// the stale-item reset, which knows the item id but not the Botnoi-assigned
+	// batch_id (outbound_id).
+	DeleteByCallListItemID(callListItemID string) error
 	Count() (int64, error)
 }
 
@@ -60,6 +64,15 @@ func (repo *callQueueRepository) DeleteByOutboundID(outboundID string) error {
 	_, err := repo.Collection.DeleteOne(repo.Context, bson.M{"outbound_id": outboundID})
 	if err != nil {
 		fiberlog.Errorf("CallQueue -> DeleteByOutboundID: %s \n", err)
+		return err
+	}
+	return nil
+}
+
+func (repo *callQueueRepository) DeleteByCallListItemID(callListItemID string) error {
+	_, err := repo.Collection.DeleteOne(repo.Context, bson.M{"call_list_item_id": callListItemID})
+	if err != nil {
+		fiberlog.Errorf("CallQueue -> DeleteByCallListItemID: %s \n", err)
 		return err
 	}
 	return nil
