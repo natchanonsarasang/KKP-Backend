@@ -42,7 +42,7 @@ func (c *OutboundBotnoiClient) MakeCall(payload entities.OutboundBotnoiDataModel
 		fiberlog.Warnf("%s OUTBOUND_ACCESS_TOKEN is empty — request will likely be rejected", tag)
 	}
 
-	fiberlog.Infof("%s placing call → phone=%s url=%s", tag, payload.PhoneNumber, c.baseURL)
+	fiberlog.Infof("%s placing call → phone=%s agent=%s url=%s", tag, payload.TelephoneNumber, payload.AgentName, c.baseURL)
 
 	// Log the exact body we send so we can confirm what was really transmitted.
 	// Note: this includes debtor PII (phone, TTS variables) — keep log access restricted.

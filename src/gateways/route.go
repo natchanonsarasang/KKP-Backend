@@ -106,6 +106,14 @@ func GatewayWebhooks(gateway HTTPGateway, app *fiber.App) {
 	api.Post("/botnoi", gateway.Webhook)
 }
 
+// GatewayKKPData exposes the head-of-queue debtor variables to the V2 voicebot's
+// "Tools KKP_Data" call. No JWT: it is called by Botnoi mid-call, like the webhook.
+func GatewayKKPData(gateway HTTPGateway, app *fiber.App) {
+	api := app.Group("/api/v1/kkp-data")
+
+	api.Get("/", gateway.KKPData)
+}
+
 func GatewayVoicebotMakeCall(gateway HTTPGateway, app *fiber.App) {
 	api := app.Group("/api/v1/voicebot/make-call", middlewares.SetJWtHeaderHandler())
 

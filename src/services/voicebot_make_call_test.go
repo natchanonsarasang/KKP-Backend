@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"go-fiber-template/domain/entities"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -33,8 +34,8 @@ func TestVoicebotMakeCallService_Validation(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "phone_number is required", err.Error())
 
-	// Case 2: Nil variables map — no longer an error; the call proceeds with every
-	// flow field empty (no mock defaults are filled in).
+	// Case 2: Nil variables map is fine — V2 no longer sends variables. The call
+	// proceeds and a default outbound_id is generated when none is supplied.
 	var capturedPayload entities.OutboundBotnoiDataModel
 	mockClient.MakeCallFunc = func(payload entities.OutboundBotnoiDataModel) error {
 		capturedPayload = payload
@@ -45,14 +46,13 @@ func TestVoicebotMakeCallService_Validation(t *testing.T) {
 		Variables:   nil,
 	})
 	assert.NoError(t, err)
-	assert.Contains(t, capturedPayload.Flow, "<!customer_name|!>")
-	assert.Contains(t, capturedPayload.Flow, "<!car_detail|!>")
-	assert.Contains(t, capturedPayload.Flow, "<!province|!>")
-	assert.Contains(t, capturedPayload.Flow, "<!total_debt|!>")
-	assert.Contains(t, capturedPayload.Flow, "<!overdue_installment|!>")
+	assert.Equal(t, "0909722021", capturedPayload.TelephoneNumber)
+	assert.True(t, strings.HasPrefix(capturedPayload.OutboundID, "outbound_"))
 }
 
 func TestVoicebotMakeCallService_MakeCall(t *testing.T) {
+	t.Setenv("OUTBOUND_AGENT_NAME", "collector-agent")
+
 	var capturedPayload entities.OutboundBotnoiDataModel
 	mockClient := &mockOutboundBotnoiClient{
 		MakeCallFunc: func(payload entities.OutboundBotnoiDataModel) error {
@@ -65,41 +65,16 @@ func TestVoicebotMakeCallService_MakeCall(t *testing.T) {
 		outboutClient: mockClient,
 	}
 
-	variables := map[string]any{
-		"name":                "สมชาย",
-		"car_detail":          "Toyota Vios กข1234",
-		"total_debt":          1500.50,
-		"total_interest":      120.25,
-		"total_fine":          50,
-		"overdue_installment": "3",
-	}
-
 	err := svc.MakeCall(entities.VoicebotMakeCallDataModel{
-		PhoneNumber:   "0812345678",
-		Variables:     variables,
-		Interruptible: true,
-		OutboundID:    "test-outbound-123",
-		EventID:       "test-event-456",
+		PhoneNumber: "0812345678",
+		OutboundID:  "test-outbound-123",
 	})
 
 	assert.NoError(t, err)
+	// V2 payload carries exactly three fields.
+	assert.Equal(t, "0812345678", capturedPayload.TelephoneNumber)
+	assert.Equal(t, "collector-agent", capturedPayload.AgentName)
 	assert.Equal(t, "test-outbound-123", capturedPayload.OutboundID)
-	assert.Equal(t, "test-event-456", capturedPayload.EventID)
-	assert.Equal(t, "0812345678", capturedPayload.PhoneNumber)
-	assert.Equal(t, "35250812345678", capturedPayload.SourcePhone)
-	assert.Equal(t, "212", capturedPayload.Speaker)
-	assert.Equal(t, "0.1", capturedPayload.FalseSilenceSec)
-	assert.Equal(t, "True", capturedPayload.Interruptible)
-
-	// Verify buildFlow carries the variables through with the units the bot script
-	// no longer supplies: baht/satang amounts, interest/fine with their label, and
-	// installments suffixed with "งวด".
-	assert.Contains(t, capturedPayload.Flow, "สมชาย")
-	assert.Contains(t, capturedPayload.Flow, "Toyota Vios กข1234")
-	assert.Contains(t, capturedPayload.Flow, "<!total_debt|1500 บาท 50 สตางค์!>")
-	assert.Contains(t, capturedPayload.Flow, "<!total_interest|ดอกเบี้ย 120 บาท 25 สตางค์!>")
-	assert.Contains(t, capturedPayload.Flow, "<!total_fine|เบี้ยปรับ 50 บาท!>")
-	assert.Contains(t, capturedPayload.Flow, "<!overdue_installment|3งวด!>")
 }
 
 func TestSplitCarDetail(t *testing.T) {
@@ -125,30 +100,6 @@ func TestSplitCarDetail(t *testing.T) {
 	}
 }
 
-// When car_detail carries a province, the built flow must expose the plate and
-// province as two separate variables.
-func TestVoicebotMakeCall_SplitsCarDetailIntoProvince(t *testing.T) {
-	var capturedPayload entities.OutboundBotnoiDataModel
-	mockClient := &mockOutboundBotnoiClient{
-		MakeCallFunc: func(payload entities.OutboundBotnoiDataModel) error {
-			capturedPayload = payload
-			return nil
-		},
-	}
-	svc := &voicebotMakeCallService{outboutClient: mockClient}
-
-	err := svc.MakeCall(entities.VoicebotMakeCallDataModel{
-		PhoneNumber: "0812345678",
-		Variables: map[string]any{
-			"car_detail": "ฅฆ 9091 ประจวบคีรีขันธ์",
-		},
-	})
-
-	assert.NoError(t, err)
-	assert.Contains(t, capturedPayload.Flow, "<!car_detail|ฅฆ 9091!>")
-	assert.Contains(t, capturedPayload.Flow, "<!province|ประจวบคีรีขันธ์!>")
-}
-
 func TestVoicebotMakeCallService_ClientError(t *testing.T) {
 	mockClient := &mockOutboundBotnoiClient{
 		MakeCallFunc: func(payload entities.OutboundBotnoiDataModel) error {
@@ -162,12 +113,6 @@ func TestVoicebotMakeCallService_ClientError(t *testing.T) {
 
 	err := svc.MakeCall(entities.VoicebotMakeCallDataModel{
 		PhoneNumber: "0812345678",
-		Variables: map[string]any{
-			"name":               "สมชาย",
-			"outstanding_amount": "1500.50",
-			"due_date":           "2026-06-20",
-			"policy_no":          "987654",
-		},
 	})
 
 	assert.Error(t, err)

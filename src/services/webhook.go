@@ -51,6 +51,7 @@ type webhookService struct {
 	CallAttemptService  ICallAttemptsService
 	CallSessionService  ICallSessionsService
 	CallProcessService  ICallProcessService
+	CallQueueService    ICallQueueService
 }
 
 func NewWebhookService(
@@ -60,6 +61,7 @@ func NewWebhookService(
 	attempts ICallAttemptsService,
 	sessions ICallSessionsService,
 	callProcess ICallProcessService,
+	callQueue ICallQueueService,
 ) IWebhookService {
 	return &webhookService{
 		CallRecordsService:  callRecords,
@@ -68,6 +70,7 @@ func NewWebhookService(
 		CallAttemptService:  attempts,
 		CallSessionService:  sessions,
 		CallProcessService:  callProcess,
+		CallQueueService:    callQueue,
 	}
 }
 
@@ -425,6 +428,18 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 					break
 				}
 			}
+		}
+	}
+
+	// Remove this call's queue row so the next call's KKP_Data fetch reads the
+	// next debtor. Must happen before we trigger the next ProcessSession below,
+	// which places the following call. Keyed by outbound_id, which Botnoi echoes
+	// back as callID.
+	if callID != "" {
+		if err := s.CallQueueService.DeleteByOutboundID(callID); err != nil {
+			log.Errorf("%s failed to delete call queue row %q: %v", tag, callID, err)
+		} else {
+			log.Infof("%s call queue row %q removed", tag, callID)
 		}
 	}
 

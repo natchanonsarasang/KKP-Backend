@@ -23,6 +23,7 @@ type callProcessService struct {
 	DebtorsRepository       repositories.IDebtorsRepository
 	CallRecordsRepository   repositories.ICallRecordsRepository
 	CallAttemptsRepository  repositories.ICallAttemptsRepository
+	CallQueueService        ICallQueueService
 	OutboundClient          client.IOutboundBotnoiClient
 }
 
@@ -38,6 +39,7 @@ func NewCallProcessService(
 	debtors repositories.IDebtorsRepository,
 	records repositories.ICallRecordsRepository,
 	attempts repositories.ICallAttemptsRepository,
+	callQueue ICallQueueService,
 ) ICallProcessService {
 	return &callProcessService{
 		CallSessionsRepository:  sessions,
@@ -45,6 +47,7 @@ func NewCallProcessService(
 		DebtorsRepository:       debtors,
 		CallRecordsRepository:   records,
 		CallAttemptsRepository:  attempts,
+		CallQueueService:        callQueue,
 		OutboundClient:          client.NewOutboundBotnoiClient("", "", ""),
 	}
 }
@@ -218,6 +221,9 @@ func (sv *callProcessService) ProcessSession(sessionID string) error {
 		sv.CallListItemsRepository.UpdateManyStatus(staleIDs, "failed", "Call timed out", false)
 		for _, sid := range staleIDs {
 			sv.CallAttemptsRepository.UpdateStatusByListItemID(sid, "calling", "failed", "Call timed out", false, "Stale timeout (5 min)")
+			// A stale call never got a webhook, so its queue row would otherwise
+			// linger and be served to the NEXT call (wrong debtor). Drop it now.
+			sv.CallQueueService.DeleteByOutboundID("outbound_" + sid)
 		}
 
 		// Stale items never got a webhook to bump these counters themselves
@@ -235,6 +241,12 @@ func (sv *callProcessService) ProcessSession(sessionID string) error {
 	maxConcurrent := session.Settings.ConcurrentCalls
 	if maxConcurrent == 0 {
 		maxConcurrent = 5
+	}
+	// V2 voicebot: the KKP_Data fetch carries no identifier, so we can only serve
+	// the queue head unambiguously if exactly one real call is live at a time.
+	// TestMode never hits the queue, so it keeps the configured concurrency.
+	if !session.Settings.TestMode {
+		maxConcurrent = 1
 	}
 	availableSlots := maxConcurrent - activeCallingCount
 	if availableSlots < 0 {
@@ -518,54 +530,32 @@ func (sv *callProcessService) placeCall(
 		return mockStatus != entities.StatusFailed
 	}
 
-	vars := prepareDebtorVariables(debtor.Variables)
-	// Only the debtor's own variables are sent — an unfilled field stays empty and
-	// the bot reads nothing there. The bot script no longer carries the unit words,
-	// so we format them here: amounts as Thai baht/satang (interest/fine prefixed
-	// with their label and dropped when zero), installments suffixed with "งวด".
-	applyFlowVariables(vars)
-	vars["bot_type"] = "{{in_init_conversation}}"
-	vars["intent"] = "{{in_init_conversation}}"
-
-
 	// outbound_id is what comes back to us in the webhook, so we use it as the call id.
 	outboundID := "outbound_" + item.ID
 
+	// V2 contract: dial the debtor with the pre-configured agent. The agent
+	// (voicebot persona/script) is selected by name and configured on the Botnoi
+	// side, so no flow/TTS/ASR fields are sent.
 	payload := entities.OutboundBotnoiDataModel{
-		OutboundID: outboundID,
-		Flow: buildFlow(outboundID,
-			vars["name"],
-			vars["car_detail"],
-			vars["province"],
-			vars["total_debt"],
-			vars["total_interest"],
-			vars["total_fine"],
-			vars["overdue_installment"],
-			vars["intent"]),
-		PhoneNumber: "3525" + debtor.PhoneNumber,
-		BotID:       os.Getenv("BOT_ID"),
-		//BotType:     os.Getenv("BOT_TYPE"),
-		//Intent:      "in_init_conversation",
-		// The partner /outbound contract only requires outbound_id, phonenumber,
-		// flow, bot_id. The extra call-config fields below are kept (commented)
-		// for future use — re-enable if the partner API stops applying defaults.
-		 EventID:          "event_" + sessionID + "_" + item.ID,
-		 SourcePhone:      "3525" + debtor.PhoneNumber,
-		 Speaker:          "212",
-		 Language:         "th",
-		 AgentPhoneNumber: "0800000000",
-		 Speed:            "1",
-		 TTS:              "voicebot-premium",
-		 ASRProvider:      "botnoi-th-noise-classifier-C",
-		 ASRLanguageCode:  "th",
-		 ASRTimeout:       5,
-		 FalseTimeoutSec:  "1",
-		 FalseSilenceSec:  "0.1",
-		 TrueSilenceSec:   "0.25",
-		 Interruptible:    boolToStr(session.Settings.Interruptible),
+		TelephoneNumber: debtor.PhoneNumber,
+		AgentName:       os.Getenv("OUTBOUND_AGENT_NAME"),
+		OutboundID:      outboundID,
+	}
+
+	// Push the debtor's variables onto the queue BEFORE dialing, so the row is
+	// already there when the voicebot's KKP_Data fetch lands early in the call.
+	// Because maxConcurrent is forced to 1 for real calls, this is the only live
+	// row and thus unambiguously the head the fetch will read.
+	if err := sv.CallQueueService.Enqueue(session, item, debtor, outboundID); err != nil {
+		fiberlog.Errorf("[Session %s] enqueue call queue for item %s failed: %s", sessionID, item.ID, err)
+		sv.CallListItemsRepository.UpdateManyStatus([]string{item.ID}, "failed", "queue enqueue failed: "+err.Error(), false)
+		return false
 	}
 
 	if err := sv.OutboundClient.MakeCall(payload); err != nil {
+		// Roll back the queue row we just pushed so a failed dial never serves
+		// its data to the next call.
+		sv.CallQueueService.DeleteByOutboundID(outboundID)
 		sv.CallListItemsRepository.UpdateManyStatus([]string{item.ID}, "failed", err.Error(), false)
 		return false
 	}

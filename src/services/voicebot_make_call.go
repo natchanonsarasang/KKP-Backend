@@ -4,9 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"go-fiber-template/domain/entities"
-	"go-fiber-template/domain/utils"
 	"go-fiber-template/src/client"
-	"strings"
+	"os"
 	"time"
 )
 
@@ -33,57 +32,14 @@ func (sv *voicebotMakeCallService) MakeCall(data entities.VoicebotMakeCallDataMo
 	if data.OutboundID == "" {
 		data.OutboundID = fmt.Sprintf("outbound_%d", time.Now().UnixMilli())
 	}
-	if data.EventID == "" {
-		data.EventID = fmt.Sprintf("event_%d", time.Now().UnixMilli())
-	}
-	variables := prepareVoicebotVariables(data.Variables)
-	// Only the caller's own variables are sent — an unfilled field stays empty and
-	// the bot reads nothing there. The bot script no longer carries the unit words,
-	// so we format them here: amounts as Thai baht/satang (interest/fine prefixed
-	// with their label and dropped when zero), installments suffixed with "งวด".
-	applyFlowVariablesAny(variables)
-	variables["bot_type"] = "in_init_conversation"
-	variables["intent"] = "in_init_conversation"
 
-	 var interruptible string
-	 if data.Interruptible {
-	 	interruptible = "True"
-	 } else {
-	 	interruptible = "False"
-	 }
-
+	// V2 contract: only the number to dial, the pre-configured agent, and the
+	// correlation id. The agent (voicebot persona/script) is selected by name and
+	// configured on the Botnoi side, so no flow/TTS/ASR fields are sent.
 	payload := entities.OutboundBotnoiDataModel{
-		OutboundID: data.OutboundID,
-		Flow: buildFlow(data.OutboundID,
-			getStringVal(variables, "name"),
-			getStringVal(variables, "car_detail"),
-			getStringVal(variables, "province"),
-			getStringVal(variables, "total_debt"),
-			getStringVal(variables, "total_interest"),
-			getStringVal(variables, "total_fine"),
-			getStringVal(variables, "overdue_installment"),
-			getStringVal(variables, "intent")),
-		PhoneNumber: data.PhoneNumber,
-		BotID:       "6a06964fb875327d960f05f0",
-		//BotType:     os.Getenv("BOT_TYPE"),
-		//Intent:      "in_init_conversation",
-		// The partner /outbound contract only requires outbound_id, phonenumber,
-		// flow, bot_id. The extra call-config fields below are kept (commented)
-		// for future use — re-enable if the partner API stops applying defaults.
-		 EventID:          data.EventID,
-		 SourcePhone:      "3525" + data.PhoneNumber,
-		 Speaker:          "212",
-		 Language:         "th",
-		 AgentPhoneNumber: "0800000000",
-		 Speed:            "1",
-		 TTS:              "voicebot-premium",
-		 ASRProvider:      "botnoi-th-noise-classifier-C",
-		 ASRLanguageCode:  "th",
-		 ASRTimeout:       5,
-		 FalseTimeoutSec:  "1",
-		 FalseSilenceSec:  "0.1",
-		 TrueSilenceSec:   "0.25",
-		 Interruptible:    interruptible,
+		TelephoneNumber: data.PhoneNumber,
+		AgentName:       os.Getenv("OUTBOUND_AGENT_NAME"),
+		OutboundID:      data.OutboundID,
 	}
 
 	err := sv.outboutClient.MakeCall(payload)
@@ -99,7 +55,6 @@ func validateVoicebotMakeCall(data entities.VoicebotMakeCallDataModel) error {
 	if data.PhoneNumber == "" {
 		return errors.New("phone_number is required")
 	}
-	// Variables may be nil/partial — any unfilled flow field is simply sent empty.
 	return nil
 }
 
@@ -113,55 +68,4 @@ func getStringVal(m map[string]any, key string) string {
 		return fmt.Sprintf("%v", val)
 	}
 	return str
-}
-
-func prepareVoicebotVariables(input map[string]any) map[string]any {
-	variables := make(map[string]any)
-
-	for key, value := range input {
-		variables[key] = value
-	}
-
-	policyNo := getStringVal(variables, "policy_no")
-	if policyNo != "" {
-		raw := strings.TrimSpace(policyNo)
-
-		if raw != "" {
-			variables["policy_no_raw"] = raw
-			variables["policy_no"] = utils.ToThaiDigitSpeech(raw)
-		}
-	}
-
-	// Split the combined "car_detail" (plate + province, e.g.
-	// "ฅฆ 9091 ประจวบคีรีขันธ์") into the plate and a separate "province"
-	// variable so the bot can read them independently.
-	if carDetail := getStringVal(variables, "car_detail"); carDetail != "" {
-		plate, province := splitCarDetail(carDetail)
-		variables["car_detail"] = plate
-		variables["province"] = province
-	}
-
-	date_today := utils.ThaiTodayString()
-	variables["date_today"] = date_today
-
-	return variables
-}
-
-func buildFlow(outboundID string, name string,
-	carDetail string, province string, totalDebt string, totalInterest string, totalFine string,
-	overdueInstallment string, intent string) string {
-	flow := fmt.Sprintf(
-		"<!outbound_id|%s!>|||"+
-			"<!customer_name|%s!>|||"+
-			"<!car_detail|%s!>|||"+
-			"<!province|%s!>|||"+
-			"<!total_debt|%s!>|||"+
-			"<!total_interest|%s!>|||"+
-			"<!total_fine|%s!>|||"+
-			"<!overdue_installment|%s!>|||"+
-			"<!intent|%s!>|||"+
-			"{{in_init_conversation}}",
-		outboundID, name, carDetail, province, totalDebt, totalInterest, totalFine, overdueInstallment, intent)
-
-	return flow
 }
