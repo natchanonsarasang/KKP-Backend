@@ -221,9 +221,11 @@ func (sv *callProcessService) ProcessSession(sessionID string) error {
 		sv.CallListItemsRepository.UpdateManyStatus(staleIDs, "failed", "Call timed out", false)
 		for _, sid := range staleIDs {
 			sv.CallAttemptsRepository.UpdateStatusByListItemID(sid, "calling", "failed", "Call timed out", false, "Stale timeout (5 min)")
-			// A stale call never got a webhook, so its queue row would otherwise
+			// A stale call never got a result, so its queue row would otherwise
 			// linger and be served to the NEXT call (wrong debtor). Drop it now.
-			sv.CallQueueService.DeleteByOutboundID("outbound_" + sid)
+			// Keyed by the item id because the queue's outbound_id is now the
+			// Botnoi-assigned batch_id, which the stale sweep doesn't have.
+			sv.CallQueueService.DeleteByCallListItemID(sid)
 		}
 
 		// Stale items never got a webhook to bump these counters themselves
@@ -530,12 +532,22 @@ func (sv *callProcessService) placeCall(
 		return mockStatus != entities.StatusFailed
 	}
 
-	// outbound_id is what comes back to us in the webhook, so we use it as the call id.
-	outboundID := "outbound_" + item.ID
+	// V2 batch contract: first create a batch for this number. Botnoi returns a
+	// batch_id which becomes the outbound_id for the actual call and the key we
+	// poll for the result (GET /outbound/batch/{batch_id}) while the webhook is
+	// unavailable. batch_name is a traceable label; the timestamp suffix keeps it
+	// unique even across retries of the same item (the item id is reused on retry).
+	batchName := fmt.Sprintf("kkp_%s_%d", item.ID, time.Now().UnixMilli())
+	outboundID, err := sv.OutboundClient.CreateBatch(debtor.PhoneNumber, batchName)
+	if err != nil {
+		fiberlog.Errorf("[Session %s] create batch for item %s failed: %s", sessionID, item.ID, err)
+		sv.CallListItemsRepository.UpdateManyStatus([]string{item.ID}, "failed", "batch creation failed: "+err.Error(), false)
+		return false
+	}
 
 	// V2 contract: dial the debtor with the pre-configured agent. The agent
 	// (voicebot persona/script) is selected by name and configured on the Botnoi
-	// side, so no flow/TTS/ASR fields are sent.
+	// side, so no flow/TTS/ASR fields are sent. outbound_id is the batch_id.
 	payload := entities.OutboundBotnoiDataModel{
 		TelephoneNumber: debtor.PhoneNumber,
 		AgentName:       os.Getenv("OUTBOUND_AGENT_NAME"),
@@ -595,7 +607,8 @@ func (sv *callProcessService) placeCall(
 		PickedUp:       boolPtr(false),
 	})
 
-	// Update debtor contact attempt count (real result comes later via webhook).
+	// Update debtor contact attempt count (real result comes later via the poller,
+	// or the webhook once it is available).
 	nowTimeUTC := time.Now().UTC()
 	sv.DebtorsRepository.UpdateStats(item.DebtorID, entities.DebtorStatsUpdate{
 		ContactAttempts:    debtor.ContactAttempts + 1,
@@ -607,6 +620,13 @@ func (sv *callProcessService) placeCall(
 		CallOutcome:        debtor.CallOutcome,
 		CallAnswered:       debtor.CallAnswered,
 	})
+
+	// The webhook that used to close the loop is not finished on the Botnoi side
+	// yet, so poll the batch status endpoint until this call reports a terminal
+	// outcome, then finalize it (update records, advance the session, trigger the
+	// next call) — mirroring what the webhook does. When the webhook is ready this
+	// goroutine can simply be removed. Runs detached so the dial goroutine returns.
+	go sv.pollBatchUntilDone(sessionID, item, debtor, callRecordID, outboundID)
 
 	return true
 }

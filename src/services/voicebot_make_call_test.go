@@ -10,7 +10,9 @@ import (
 )
 
 type mockOutboundBotnoiClient struct {
-	MakeCallFunc func(payload entities.OutboundBotnoiDataModel) error
+	MakeCallFunc       func(payload entities.OutboundBotnoiDataModel) error
+	CreateBatchFunc    func(phoneNumber, batchName string) (string, error)
+	GetBatchStatusFunc func(batchID string) (*entities.OutboundBatchStatusResponse, error)
 }
 
 func (m *mockOutboundBotnoiClient) MakeCall(payload entities.OutboundBotnoiDataModel) error {
@@ -18,6 +20,20 @@ func (m *mockOutboundBotnoiClient) MakeCall(payload entities.OutboundBotnoiDataM
 		return m.MakeCallFunc(payload)
 	}
 	return nil
+}
+
+func (m *mockOutboundBotnoiClient) CreateBatch(phoneNumber, batchName string) (string, error) {
+	if m.CreateBatchFunc != nil {
+		return m.CreateBatchFunc(phoneNumber, batchName)
+	}
+	return "batch-" + batchName, nil
+}
+
+func (m *mockOutboundBotnoiClient) GetBatchStatus(batchID string) (*entities.OutboundBatchStatusResponse, error) {
+	if m.GetBatchStatusFunc != nil {
+		return m.GetBatchStatusFunc(batchID)
+	}
+	return &entities.OutboundBatchStatusResponse{}, nil
 }
 
 func TestVoicebotMakeCallService_Validation(t *testing.T) {
