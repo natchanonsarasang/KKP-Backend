@@ -20,7 +20,7 @@ type BotnoiLogsClient struct {
 }
 
 type IBotnoiLogsClient interface {
-	ListFiles(agentName, startDate, endDate string) ([]byte, error)
+	ListFiles(agentID, startDate, endDate string) ([]byte, error)
 	ReadLog(filePath string) ([]byte, error)
 	GetAudio(filePath string) (body []byte, contentType string, contentDisposition string, err error)
 }
@@ -48,8 +48,10 @@ func NewBotnoiLogsClient() IBotnoiLogsClient {
 }
 
 // ListFiles calls GET /logs/list_file/ (the trailing slash is required).
-func (c *BotnoiLogsClient) ListFiles(agentName, startDate, endDate string) ([]byte, error) {
-	req := c.newRequest().SetQueryParam("agent_name", agentName)
+// The conversation-logs endpoints key on agent_id (not agent_name like the
+// outbound/batch endpoints do); sending agent_name yields HTTP 422.
+func (c *BotnoiLogsClient) ListFiles(agentID, startDate, endDate string) ([]byte, error) {
+	req := c.newRequest().SetQueryParam("agent_id", agentID)
 	if startDate != "" {
 		req.SetQueryParam("start_date", startDate)
 	}
