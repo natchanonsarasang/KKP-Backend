@@ -21,8 +21,9 @@ type IBotnoiLogsService interface {
 }
 
 var (
-	ErrBotnoiAgentNotConfigured = errors.New("OUTBOUND_AGENT_NAME is not set")
-	ErrBotnoiInvalidFilePath    = errors.New("file_path is not allowed")
+	ErrBotnoiAgentNotConfigured   = errors.New("OUTBOUND_AGENT_NAME is not set")
+	ErrBotnoiAgentIDNotConfigured = errors.New("OUTBOUND_AGENT_ID is not set")
+	ErrBotnoiInvalidFilePath      = errors.New("file_path is not allowed")
 )
 
 func NewBotnoiLogsService() IBotnoiLogsService {
@@ -30,11 +31,12 @@ func NewBotnoiLogsService() IBotnoiLogsService {
 }
 
 func (sv *botnoiLogsService) ListFiles(startDate, endDate string) ([]byte, error) {
-	agentName := os.Getenv("OUTBOUND_AGENT_NAME")
-	if agentName == "" {
-		return nil, ErrBotnoiAgentNotConfigured
+	// The logs API filters by agent_id, not agent_name (see BotnoiLogsClient.ListFiles).
+	agentID := os.Getenv("OUTBOUND_AGENT_ID")
+	if agentID == "" {
+		return nil, ErrBotnoiAgentIDNotConfigured
 	}
-	return sv.client.ListFiles(agentName, startDate, endDate)
+	return sv.client.ListFiles(agentID, startDate, endDate)
 }
 
 func (sv *botnoiLogsService) ReadLog(filePath string) ([]byte, error) {

@@ -69,7 +69,8 @@ func botnoiLogsError(ctx *fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, services.ErrBotnoiInvalidFilePath):
 		return ctx.Status(fiber.StatusBadRequest).JSON(entities.ResponseMessage{Message: err.Error()})
-	case errors.Is(err, services.ErrBotnoiAgentNotConfigured):
+	case errors.Is(err, services.ErrBotnoiAgentNotConfigured),
+		errors.Is(err, services.ErrBotnoiAgentIDNotConfigured):
 		return ctx.Status(fiber.StatusInternalServerError).JSON(entities.ResponseMessage{Message: err.Error()})
 	case errors.As(err, &upstream):
 		return ctx.Status(fiber.StatusBadGateway).JSON(entities.ResponseModel{
