@@ -53,14 +53,14 @@ func (sv *botnoiLogsService) GetAudio(filePath string) ([]byte, string, string, 
 	return sv.client.GetAudio(filePath)
 }
 
-// validateBotnoiFilePath only allows files stored under "<agent_name>/", the
-// folder layout Botnoi uses for list_file results.
+// validateBotnoiFilePath only allows files stored under "<agent_id>/", the
+// folder layout Botnoi uses for list_file results (e.g. "agt_3d2fa3ed2358/...").
 func validateBotnoiFilePath(filePath string) error {
-	agentName := os.Getenv("OUTBOUND_AGENT_NAME")
-	if agentName == "" {
-		return ErrBotnoiAgentNotConfigured
+	agentID := os.Getenv("OUTBOUND_AGENT_ID")
+	if agentID == "" {
+		return ErrBotnoiAgentIDNotConfigured
 	}
-	if filePath == "" || strings.Contains(filePath, "..") || !strings.HasPrefix(filePath, agentName+"/") {
+	if filePath == "" || strings.Contains(filePath, "..") || !strings.HasPrefix(filePath, agentID+"/") {
 		return ErrBotnoiInvalidFilePath
 	}
 	return nil
