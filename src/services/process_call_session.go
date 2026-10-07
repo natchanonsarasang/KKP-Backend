@@ -456,8 +456,10 @@ func (sv *callProcessService) placeCall(
 
 	// Generate the call record id ourselves so we can link it back to the item/attempt.
 	// The webhook correlates its result back to this record by phone number
-	// (debtor.PhoneNumber) since Botnoi echoes no outbound id.
+	// (debtor.PhoneNumber, echoed as callerNumber). CreatedAt must be set so the
+	// webhook can pick the newest pending record when stale ones linger.
 	callRecordID := uuid.NewString()
+	nowRecord := time.Now().UTC()
 
 	sv.CallRecordsRepository.InsertCallRecord(entities.CallRecordDataModel{
 		ID:          callRecordID,
@@ -465,6 +467,8 @@ func (sv *callProcessService) placeCall(
 		Status:      entities.StatusPending,
 		UserID:      session.UserID,
 		WorkspaceID: session.WorkspaceID,
+		CreatedAt:   nowRecord,
+		UpdatedAt:   nowRecord,
 	})
 
 	// Link call_record_id back onto the list item (keep status "calling" until webhook).
