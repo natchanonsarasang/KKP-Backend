@@ -86,13 +86,11 @@ func (c *OutboundBotnoiClient) MakeCall(req entities.OutboundCallRequest) error 
 	return nil
 }
 
-// callsURL builds the place-a-call endpoint from OUTBOUND_URL. OUTBOUND_URL is
-// the Botnoi host; a legacy trailing "/api" segment is stripped since the
-// provisioning endpoint lives at the host root:
+// callsURL builds the place-a-call endpoint by appending the provisioning path
+// to OUTBOUND_URL (the API base, e.g. ".../api"):
 //
-//	{host}/v1/provisioning/tenants/{tenant_id}/calls
+//	{OUTBOUND_URL}/v1/provisioning/tenants/{tenant_id}/calls
 func (c *OutboundBotnoiClient) callsURL() string {
 	base := strings.TrimRight(c.baseURL, "/")
-	base = strings.TrimSuffix(base, "/api")
 	return base + "/v1/provisioning/tenants/" + c.tenantID + "/calls"
 }
