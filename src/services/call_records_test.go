@@ -21,11 +21,6 @@ type mockCallRecordsRepository struct {
 	DeleteFunc       func(id string) error
 	UpdateByUserFunc func(id string, userID string, data entities.CallRecordDataModel) error
 	DeleteByUserFunc func(id string, userID string) error
-	FindByConversationIDsByUserFunc func(userID string, conversationIDs []string) (*[]entities.CallRecordDataModel, error)
-}
-
-func (m *mockCallRecordsRepository) FindByConversationIDsByUser(userID string, conversationIDs []string) (*[]entities.CallRecordDataModel, error) {
-	return m.FindByConversationIDsByUserFunc(userID, conversationIDs)
 }
 
 func (m *mockCallRecordsRepository) InsertCallRecord(data entities.CallRecordDataModel) error {

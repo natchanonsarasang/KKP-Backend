@@ -184,7 +184,6 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 	// Update Call Record and related entities
 	if callRecord != nil {
 		callRecord.Status = mappedStatus
-		callRecord.ConversationID = payload.ConversationID
 		var resultData interface{} = payload
 		callRecord.ResultData = &resultData
 		callRecord.CallDuration = duration

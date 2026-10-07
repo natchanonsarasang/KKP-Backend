@@ -63,7 +63,7 @@ func main() {
 	microsoftOAuthClient := client.NewMicrosoftOAuthClient()
 	usersSv := sv.NewUsersService(usersRepo, googleOAuthClient, microsoftOAuthClient)
 	audioProxySv := sv.NewAudioProxyService()
-	botnoiLogsSv := sv.NewBotnoiLogsService(callRecordsRepo, callListItemRepo)
+	botnoiLogsSv := sv.NewBotnoiLogsService()
 
 	gw.NewHTTPGateway(app, sv6, callRecordsSv, sv1, sv2, sv3, sv4, webhookSv, callProcessSv, usersSv, callTemplatesSv, callTokensSv, audioProxySv, botnoiLogsSv)
 

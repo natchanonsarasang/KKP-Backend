@@ -24,7 +24,6 @@ type ICallListItemsRepository interface {
 	FindByID(id string) (*entities.CallListItemModel, error)
 	FindByIDByUser(id string, workspaceID string) (*entities.CallListItemModel, error)
 	FindByFilter(filter entities.CallListItemFilter) (*[]entities.CallListItemModel, error)
-	FindByCallRecordIDs(callRecordIDs []string) (*[]entities.CallListItemModel, error)
 	// System Methods
 	Update(id string, data entities.CallListItemModel) error
 	Delete(id string) error
@@ -72,24 +71,6 @@ func (repo *callListItemsRepository) FindAllByWorkspace(workspaceID string, user
 	defer cursor.Close(repo.Context)
 	if err := cursor.All(repo.Context, &items); err != nil {
 		fiberlog.Errorf("CallListItems -> FindAllByWorkspace: %s \n", err)
-		return nil, err
-	}
-	return &items, nil
-}
-
-func (repo *callListItemsRepository) FindByCallRecordIDs(callRecordIDs []string) (*[]entities.CallListItemModel, error) {
-	items := []entities.CallListItemModel{}
-	if len(callRecordIDs) == 0 {
-		return &items, nil
-	}
-	cursor, err := repo.Collection.Find(repo.Context, bson.M{"call_record_id": bson.M{"$in": callRecordIDs}})
-	if err != nil {
-		fiberlog.Errorf("CallListItems -> FindByCallRecordIDs: %s \n", err)
-		return nil, err
-	}
-	defer cursor.Close(repo.Context)
-	if err := cursor.All(repo.Context, &items); err != nil {
-		fiberlog.Errorf("CallListItems -> FindByCallRecordIDs: %s \n", err)
 		return nil, err
 	}
 	return &items, nil

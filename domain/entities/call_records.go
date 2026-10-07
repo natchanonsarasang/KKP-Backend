@@ -34,10 +34,6 @@ type CallRecordDataModel struct {
 	AppointmentTime string        `json:"appointment_time" bson:"appointment_time,omitempty"`
 	Status          CallStatus    `json:"status" bson:"status,omitempty"`
 	BotnoiCallID    string        `json:"botnoi_call_id" bson:"botnoi_call_id,omitempty"`
-	// ConversationID is Botnoi's conversation id from the webhook. It is the UUID
-	// in the conversation log file names, so the History tab can link a log back
-	// to this record (and its debtor).
-	ConversationID  string        `json:"conversation_id" bson:"conversation_id,omitempty"`
 	ResultData      *interface{}  `bson:"result_data,omitempty" json:"result_data"`
 	DueDate         *time.Time     `bson:"due_date,omitempty" json:"due_date"`
 	Amount          float64       `bson:"amount,omitempty" json:"amount"`
