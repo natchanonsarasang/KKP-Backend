@@ -62,10 +62,13 @@ var metadataVariableKeys = []string{
 
 // buildCallMetadata builds the metadata object posted with the call. It carries
 // the debtor's customer_name plus the known debt variables; any value present on
-// the debtor is forwarded as-is.
+// the debtor is forwarded as-is. callerNumber is set to the dialed number: it is
+// the one metadata field Botnoi echoes back in the webhook, so we use it as the
+// correlation key to match the result to this call_record.
 func buildCallMetadata(debtor entities.DebtorModel) map[string]any {
 	meta := map[string]any{
 		"customer_name": DebtorDisplayName(&debtor),
+		"callerNumber":  debtor.PhoneNumber,
 	}
 	for _, k := range metadataVariableKeys {
 		if v, ok := debtor.Variables[k]; ok && strings.TrimSpace(v) != "" {
@@ -441,6 +444,7 @@ func (sv *callProcessService) placeCall(
 	req := entities.OutboundCallRequest{
 		Destination: debtor.PhoneNumber,
 		AgentID:     os.Getenv("OUTBOUND_AGENT_ID"),
+		Path:        strPtr("pbx"),
 		Metadata:    buildCallMetadata(debtor),
 	}
 
