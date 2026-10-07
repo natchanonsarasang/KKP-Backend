@@ -27,6 +27,9 @@ type ICallRecordsRepository interface {
 	DeleteCallRecord(id string) error
 	UpdateCallRecordByUser(id string, userID string, data entities.CallRecordDataModel) error
 	DeleteCallRecordByUser(id string, userID string) error
+	// FindByConversationIDsByUser returns the user's records whose Botnoi
+	// conversation id is one of conversationIDs.
+	FindByConversationIDsByUser(userID string, conversationIDs []string) (*[]entities.CallRecordDataModel, error)
 }
 
 func NewCallRecordsRepository(db *MongoDB) ICallRecordsRepository {
@@ -154,6 +157,35 @@ func (repo *callRecordsRepository) FindByFilter(filter entities.CallRecordFilter
 		return nil, err
 	}
 
+	return &records, nil
+}
+
+func (repo *callRecordsRepository) FindByConversationIDsByUser(userID string, conversationIDs []string) (*[]entities.CallRecordDataModel, error) {
+	records := []entities.CallRecordDataModel{}
+	if len(conversationIDs) == 0 {
+		return &records, nil
+	}
+	// result_data.conversationid covers records the webhook saved before the
+	// conversation_id field existed (it stored the payload struct, whose bson
+	// keys are the lowercased field names).
+	query := bson.M{
+		"user_id": userID,
+		"$or": bson.A{
+			bson.M{"conversation_id": bson.M{"$in": conversationIDs}},
+			bson.M{"result_data.conversationid": bson.M{"$in": conversationIDs}},
+		},
+	}
+	cursor, err := repo.Collection.Find(repo.Context, query)
+	if err != nil {
+		fiberlog.Errorf("CallRecords -> FindByConversationIDsByUser: %s \n", err)
+		return nil, err
+	}
+	defer cursor.Close(repo.Context)
+
+	if err := cursor.All(repo.Context, &records); err != nil {
+		fiberlog.Errorf("CallRecords -> FindByConversationIDsByUser decoding: %s \n", err)
+		return nil, err
+	}
 	return &records, nil
 }
 

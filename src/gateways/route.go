@@ -139,4 +139,5 @@ func GatewayBotnoiLogs(gateway HTTPGateway, app *fiber.App) {
 	api.Get("/files", gateway.ListBotnoiLogFiles)
 	api.Get("/log", gateway.ReadBotnoiLog)
 	api.Get("/audio", gateway.GetBotnoiAudio)
+	api.Get("/conversations", gateway.LookupBotnoiConversations)
 }
