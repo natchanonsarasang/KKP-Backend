@@ -34,11 +34,13 @@ Docker: `docker build -t callecto-api .` then run exposing port 8080. The Docker
 `MONGODB_URI`, `MONGODB_NAME`, `PORT` (defaults to 8080).
 Auth uses Supabase JWKS — set `JWK_SET_URL` or `SUPABASE_URL` (falls back to `VITE_SUPABASE_URL`);
 if neither is set, it validates HS256 against `JWT_SECRET_KEY`. Outbound calls need
-`OUTBOUND_URL` and `OUTBOUND_ACCESS_TOKEN`.
+`OUTBOUND_URL` (the API base, e.g. `.../api`), `OUTBOUND_ACCESS_TOKEN`,
+`OUTBOUND_TENANT_ID` (your setup `_id` from `GET /me`), and `OUTBOUND_AGENT_ID`
+(the pre-configured Botnoi agent to dial with).
 
-Note: `.env` is **not** in `.gitignore` and currently holds live MongoDB credentials and an
-outbound access token. Do not add new secrets to it expecting them to be ignored; treat the
-committed values as compromised.
+Note: `.env` is gitignored and untracked (only `.env.example` is committed). It was committed
+from the initial commit until `8c5d8fd` (June 2026), so the secrets from that period are still in
+git history — treat those old values as compromised and never reuse them.
 
 ## Architecture
 
@@ -88,20 +90,24 @@ with `{session_id, action}`:
   to keep filling slots, and marks the session `completed` only when nothing is calling/waiting.
 - `Settings.TestMode` short-circuits the real outbound call with a randomized mock outcome and
   fabricated records/stats — use it to exercise the pipeline without dialing.
-- Real calls go through `src/client/outbound_botnoi.go`; the call is correlated by
-  `outbound_<itemID>`, which the webhook later echoes back.
+- Real calls go through `src/client/outbound_botnoi.go` → `POST /v1/provisioning/tenants/
+  {tenant_id}/calls` with `{destination, agent_id, metadata}`. The debtor's data rides along in
+  `metadata` (built by `buildCallMetadata`), so there is **no mid-call fetch**. Botnoi echoes no
+  outbound id, so the webhook correlates its result back to the `call_record` by **phone number**.
 
 Per call, state is written across four collections: `call_list_items` (status `calling`),
 `call_records` (status `pending`), `call_attempts`, and debtor `stats`. The webhook closes the loop.
 
 ### Webhook + classification
 
-`POST /api/v1/webhooks/botnoi` (no JWT) is handled in `src/services/webhook.go`. It receives the
-Botnoi call result, then updates the matching `call_record`/`call_list_item`/`call_attempt` and
-the debtor's aggregate stats, advancing the session. Conversation outcomes are mapped to the fixed
-`CONVERSATION_CATEGORIES` taxonomy (Thai/English status names, main vs sub groups). Thai-language
-helpers in `process_call_session.go` (`toThaiDigitSpeech`, `formatThaiDate`, Buddhist-era dates)
-prepare TTS variables — preserve their Thai output when editing.
+`POST /api/v1/webhooks/botnoi` (no JWT) is handled in `src/services/webhook.go`. The payload
+carries `conversation_id, agent_id, status, start_time, end_time, duration, conversation_log,
+callerNumber`; the call is matched to its `call_record` by `callerNumber` (the debtor's number).
+**Status drives the outcome**: only `completed` is a picked-up/successful call — `canceled` and any
+other/future status count as not picked up. It then updates the matching
+`call_record`/`call_list_item`/`call_attempt` and the debtor's aggregate stats, advancing the
+session. The conversation transcript is still classified against the fixed `CONVERSATION_CATEGORIES`
+taxonomy (via Groq) into an AI category stored alongside the call.
 
 ### Testing
 

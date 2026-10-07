@@ -12,7 +12,7 @@ type botnoiLogsService struct {
 }
 
 // IBotnoiLogsService exposes the Botnoi conversation logs of the configured
-// agent (OUTBOUND_AGENT_NAME). The agent is fixed server-side so callers can
+// agent (OUTBOUND_AGENT_ID). The agent is fixed server-side so callers can
 // only read that agent's files.
 type IBotnoiLogsService interface {
 	ListFiles(startDate, endDate string) ([]byte, error)
@@ -21,7 +21,6 @@ type IBotnoiLogsService interface {
 }
 
 var (
-	ErrBotnoiAgentNotConfigured   = errors.New("OUTBOUND_AGENT_NAME is not set")
 	ErrBotnoiAgentIDNotConfigured = errors.New("OUTBOUND_AGENT_ID is not set")
 	ErrBotnoiInvalidFilePath      = errors.New("file_path is not allowed")
 )

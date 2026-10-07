@@ -12,10 +12,8 @@ type HTTPGateway struct {
 	CallListItemService     service.ICallListItemsService
 	CallAttemptService      service.ICallAttemptsService
 	CallSessionService      service.ICallSessionsService
-	CallQueueService        service.ICallQueueService
 	WorkspacesService       service.IWorkspacesService
 	WebhookService          service.IWebhookService
-	VoicebotMakeCallService service.IVoicebotMakeCallService
 	CallProcessService      service.ICallProcessService
 	UsersService            service.IUsersService
 	CallTemplatesService    service.ICallTemplatesService
@@ -32,9 +30,7 @@ func NewHTTPGateway(
 	items service.ICallListItemsService,
 	attempts service.ICallAttemptsService,
 	sessions service.ICallSessionsService,
-	callQueue service.ICallQueueService,
 	webhook service.IWebhookService,
-	voicebotMakeCall service.IVoicebotMakeCallService,
 	callProcess service.ICallProcessService,
 	users service.IUsersService,
 	callTemplates service.ICallTemplatesService,
@@ -49,9 +45,7 @@ func NewHTTPGateway(
 		CallListItemService:     items,
 		CallAttemptService:      attempts,
 		CallSessionService:      sessions,
-		CallQueueService:        callQueue,
 		WebhookService:          webhook,
-		VoicebotMakeCallService: voicebotMakeCall,
 		CallProcessService:      callProcess,
 		UsersService:            users,
 		CallTemplatesService:    callTemplates,
@@ -73,8 +67,6 @@ func NewHTTPGateway(
 	GatewayCallTemplates(*gateway, app)
 	GatewayCallTokens(*gateway, app)
 	GatewayWebhooks(*gateway, app)
-	GatewayKKPData(*gateway, app)
-	GatewayVoicebotMakeCall(*gateway, app)
 	GatewayProcessCallSession(*gateway, app)
 	GatewayAudioProxy(*gateway, app)
 	GatewayBotnoiLogs(*gateway, app)

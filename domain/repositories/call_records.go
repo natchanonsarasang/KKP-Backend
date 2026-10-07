@@ -136,6 +136,9 @@ func (repo *callRecordsRepository) FindByFilter(filter entities.CallRecordFilter
 	if filter.BotnoiCallID != "" {
 		query["botnoi_call_id"] = filter.BotnoiCallID
 	}
+	if filter.PhoneNumber != "" {
+		query["phone_number"] = filter.PhoneNumber
+	}
 
 	records := []entities.CallRecordDataModel{}
 	cursor, err := repo.Collection.Find(repo.Context, query)

@@ -1,18 +1,19 @@
 package entities
 
-// WebhookPayload represents the JSON payload received from the webhook.
+// WebhookPayload is the JSON the Botnoi provisioning voicebot posts back once a
+// call finishes. There is no outbound/call id to correlate on — the call is
+// matched to its originating call_record by CallerNumber (the debtor's number).
+//
+// Status is the call outcome; known values are "completed" and "canceled", and
+// more may appear in future. Only "completed" counts as a picked-up/successful
+// call — everything else (canceled, failed, ...) is treated as not picked up.
 type WebhookPayload struct {
-	OutboundID       string      `json:"outbound_id,omitempty"`
-	CallID           string      `json:"call_id,omitempty"`
-	Status           string      `json:"status,omitempty"`
-	Action           string      `json:"action,omitempty"`
-	ConversationLog  string      `json:"conversation_log,omitempty"`
-	AudioURL         string      `json:"audio_url,omitempty"`
-	Duration         interface{} `json:"duration,omitempty"` // Can be string or number
-	CallDuration     interface{} `json:"call_duration,omitempty"`
-	PhoneNumber      string      `json:"phone_number,omitempty"`
-	AppointmentDate  string      `json:"appointment_date,omitempty"`
-	AppointmentTime  string      `json:"appointment_time,omitempty"`
-	LastAMDStatus    string      `json:"last_amd_status,omitempty"`
+	ConversationID  string `json:"conversation_id,omitempty"`
+	AgentID         string `json:"agent_id,omitempty"`
+	Status          string `json:"status,omitempty"`
+	StartTime       string `json:"start_time,omitempty"`
+	EndTime         string `json:"end_time,omitempty"`
+	Duration        int    `json:"duration,omitempty"`
+	ConversationLog string `json:"conversation_log,omitempty"`
+	CallerNumber    string `json:"callerNumber,omitempty"`
 }
-

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"go-fiber-template/domain/entities"
 	"io"
-	"math"
 	"net/http"
 	"os"
 	"regexp"
@@ -51,7 +50,6 @@ type webhookService struct {
 	CallAttemptService  ICallAttemptsService
 	CallSessionService  ICallSessionsService
 	CallProcessService  ICallProcessService
-	CallQueueService    ICallQueueService
 }
 
 func NewWebhookService(
@@ -61,7 +59,6 @@ func NewWebhookService(
 	attempts ICallAttemptsService,
 	sessions ICallSessionsService,
 	callProcess ICallProcessService,
-	callQueue ICallQueueService,
 ) IWebhookService {
 	return &webhookService{
 		CallRecordsService:  callRecords,
@@ -70,37 +67,29 @@ func NewWebhookService(
 		CallAttemptService:  attempts,
 		CallSessionService:  sessions,
 		CallProcessService:  callProcess,
-		CallQueueService:    callQueue,
 	}
 }
 
 func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
-	// Extract fields
-	callID := payload.OutboundID
-	status := payload.Status
-	action := payload.Action
+	// Extract fields. Botnoi echoes no outbound/call id, so the debtor's number
+	// (callerNumber) is the only key we can correlate the call back on.
+	status := strings.ToLower(strings.TrimSpace(payload.Status))
 	conversationLog := payload.ConversationLog
-	audioURL := payload.AudioURL
-	phoneNumber := ""
+	phoneNumber := payload.CallerNumber
+	duration := payload.Duration
+	// audio is fetched via a separate endpoint we don't call yet; keep the notes
+	// key present (empty) so the frontend's parsing stays stable.
+	audioURL := ""
 
-	// Extract phone number from audio_url if missing (format: ..._PHONE.wav)
-	if phoneNumber == "" && audioURL != "" {
-		re := regexp.MustCompile(`_(\d+)\.wav`)
-		match := re.FindStringSubmatch(audioURL)
-		if len(match) > 1 {
-			phoneNumber = match[1]
-		}
-	}
-
-	if callID == "" && phoneNumber == "" {
-		log.Warnf("[Webhook] received with no identifiable data (status=%q action=%q): %+v", status, action, payload)
+	if phoneNumber == "" {
+		log.Warnf("[Webhook] received with no callerNumber (status=%q): %+v", status, payload)
 		return nil
 	}
 
 	// tag keys every log line for this webhook to the call it belongs to, so a
 	// single call can be traced end-to-end across the noisy webhook stream.
-	tag := fmt.Sprintf("[Webhook %s/%s]", callID, phoneNumber)
-	log.Infof("%s received: status=%q action=%q amd=%q audio=%t log=%t", tag, status, action, payload.LastAMDStatus, audioURL != "", conversationLog != "")
+	tag := fmt.Sprintf("[Webhook %s/%s]", payload.ConversationID, phoneNumber)
+	log.Infof("%s received: status=%q duration=%d log=%t", tag, status, duration, conversationLog != "")
 
 	// Dump the full payload Botnoi sent us so the raw inbound data is always
 	// visible in the log for debugging.
@@ -110,89 +99,23 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 		log.Infof("%s payload (struct): %+v", tag, payload)
 	}
 
-	// Check if user actually spoke
-	userParts := strings.Split(conversationLog, "User:")
-	hasUserSpoken := false
-	if len(userParts) > 1 {
-		for i := 1; i < len(userParts); i++ {
-			trimmed := strings.TrimSpace(userParts[i])
-			if len(trimmed) > 0 && !strings.Contains(strings.ToUpper(trimmed), "TIMEOUT") {
-				hasUserSpoken = true
-				break
-			}
-		}
-	}
-	isSilence := len(userParts) > 1 && !hasUserSpoken
-
-	// Map status
-	rawStatus := strings.ToLower(status)
-	var mappedStatus entities.CallStatus = entities.StatusFailed
-
-	switch {
-	case s.contains([]string{"confirm", "yes"}, strings.ToLower(action)):
-		mappedStatus = entities.StatusConfirmed
-	case s.contains([]string{"decline", "no"}, strings.ToLower(action)):
-		mappedStatus = entities.StatusDeclined
-	case strings.ToLower(action) == "unknown":
-		mappedStatus = entities.StatusNoResponse
-	case s.contains([]string{"hanged_up", "hangup", "hung_up"}, rawStatus):
-		mappedStatus = entities.StatusHangedUp
-	case rawStatus == "completed":
-		if hasUserSpoken || isSilence {
-			mappedStatus = entities.StatusCompleted
-		} else {
-			mappedStatus = entities.StatusNoAnswer
-		}
-	case rawStatus == "no answer" || rawStatus == "no_answer":
-		mappedStatus = entities.StatusNoAnswer
-	case rawStatus == "busy":
-		mappedStatus = entities.StatusBusy
-	case rawStatus == "failed" || rawStatus == "error":
-		mappedStatus = entities.StatusFailed
-	case rawStatus == "rejected":
-		mappedStatus = entities.StatusRejected
-	case rawStatus == "voicemail":
-		mappedStatus = entities.StatusVoicemail
-	}
-
-	// Reclassify as "Not Convenient" if needed
-	if mappedStatus == entities.StatusNoAnswer && conversationLog != "" {
-		if s.askedAboutCallback(conversationLog) {
-			mappedStatus = entities.StatusNotConvenient
-		}
-	}
-
-	// StatusHangedUp means the debtor answered, talked, then hung up — that is a
-	// pickup. (A "rejected" status is the caller rejecting the incoming call and
-	// stays not-picked-up.) Include it so hanged_up calls, which often arrive with
-	// no conversation_log, are still counted as picked up.
-	pickedUp := hasUserSpoken || isSilence || s.contains([]string{string(entities.StatusConfirmed), string(entities.StatusDeclined), string(entities.StatusNoResponse), string(entities.StatusCompleted), string(entities.StatusHangedUp)}, string(mappedStatus))
-
+	// Status drives the outcome: only "completed" is a picked-up/successful call;
+	// "canceled" and any other (incl. future) status count as not picked up.
+	pickedUp := status == "completed"
+	var mappedStatus entities.CallStatus
 	var finalStatus string
-	if mappedStatus == entities.StatusHangedUp {
-		finalStatus = "failed"
-	} else if pickedUp {
+	if pickedUp {
+		mappedStatus = entities.StatusCompleted
 		finalStatus = "success"
 	} else {
+		mappedStatus = entities.StatusFailed
 		finalStatus = "failed"
 	}
 
-	outcomeMap := map[entities.CallStatus]string{
-		entities.StatusConfirmed:     "Confirmed",
-		entities.StatusDeclined:      "Declined",
-		entities.StatusNoResponse:    "No Response",
-		entities.StatusNoAnswer:      "No Answer",
-		entities.StatusCompleted:     "Completed",
-		entities.StatusFailed:        "Failed",
-		entities.StatusBusy:          "Busy",
-		entities.StatusRejected:      "Rejected",
-		entities.StatusVoicemail:     "Voicemail",
-		entities.StatusHangedUp:      "Hangup",
-		entities.StatusNotConvenient: "Not Convenient",
-	}
-	callOutcome := outcomeMap[mappedStatus]
-	if callOutcome == "" {
-		callOutcome = "Unknown"
+	// Human-readable outcome label: Title-case the raw status (Completed, Canceled, …).
+	callOutcome := "Unknown"
+	if status != "" {
+		callOutcome = strings.ToUpper(status[:1]) + status[1:]
 	}
 
 	log.Infof("%s classified: mappedStatus=%s finalStatus=%s pickedUp=%t outcome=%q", tag, mappedStatus, finalStatus, pickedUp, callOutcome)
@@ -203,12 +126,10 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 	aiReason := aiResult.Reason
 	aiConfidence := aiResult.Confidence
 
-	// Hung up / rejected calls never produced a real conversation for the AI to
-	// analyse, so the classifier only ever returns a synthetic "system status"
-	// reason/confidence. Blank them out so the UI shows "-" for เหตุผล ai and
-	// ความมั่นใจ instead of a misleading value. Completed calls keep whatever the
-	// AI returned (including "AI request failed").
-	if callOutcome == "Hangup" || callOutcome == "Rejected" {
+	// A not-picked-up call (canceled/failed) produced no real conversation for the
+	// AI to analyse, so the classifier only returns a synthetic reason/confidence.
+	// Blank them so the UI shows "-" instead of a misleading value.
+	if !pickedUp {
 		aiReason = ""
 		aiConfidence = 0
 	}
@@ -218,23 +139,28 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 	// Resolve Owner (UserID, WorkspaceID)
 	var resolvedUserID, resolvedWorkspaceID string
 
-	// 1. Try from CallRecord
+	// 1. Match the originating call_record by phone number. The dialer leaves it
+	// "pending" until this webhook lands; if several pending records share the
+	// number (a prior call never resolved), take the most recent.
 	var callRecord *entities.CallRecordDataModel
-	if callID != "" {
-		records, err := s.CallRecordsService.GetAllCallRecords(entities.CallRecordFilter{BotnoiCallID: callID})
-		if err != nil {
-			log.Errorf("%s lookup call_record by id failed: %v", tag, err)
-		}
-		if records != nil && len(*records) > 0 {
-			callRecord = &(*records)[0]
-			resolvedUserID = callRecord.UserID
-			resolvedWorkspaceID = callRecord.WorkspaceID
-			if phoneNumber == "" {
-				phoneNumber = callRecord.PhoneNumber
+	records, err := s.CallRecordsService.GetAllCallRecords(entities.CallRecordFilter{
+		PhoneNumber: phoneNumber,
+		Status:      string(entities.StatusPending),
+	})
+	if err != nil {
+		log.Errorf("%s lookup call_record by phone failed: %v", tag, err)
+	}
+	if records != nil && len(*records) > 0 {
+		callRecord = &(*records)[0]
+		for i := range *records {
+			if (*records)[i].CreatedAt.After(callRecord.CreatedAt) {
+				callRecord = &(*records)[i]
 			}
-		} else {
-			log.Warnf("%s no call_record matched call id %q", tag, callID)
 		}
+		resolvedUserID = callRecord.UserID
+		resolvedWorkspaceID = callRecord.WorkspaceID
+	} else {
+		log.Warnf("%s no pending call_record matched phone %q", tag, phoneNumber)
 	}
 
 	// 2. Fallback: Try from Debtor (WorkspaceID resolve)
@@ -257,17 +183,10 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 
 	// Update Call Record and related entities
 	if callRecord != nil {
-		var duration int
-		if payload.Duration != nil {
-			duration = s.toInt(payload.Duration)
-		}
-
 		callRecord.Status = mappedStatus
 		var resultData interface{} = payload
 		callRecord.ResultData = &resultData
 		callRecord.CallDuration = duration
-		callRecord.AppointmentDate = payload.AppointmentDate
-		callRecord.AppointmentTime = payload.AppointmentTime
 		callRecord.UpdatedAt = time.Now().UTC()
 
 		if err := s.CallRecordsService.UpdateCallRecord(callRecord.ID, *callRecord); err != nil {
@@ -412,11 +331,13 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 						debtor.NotPickedUpCount++
 					}
 
-					if mappedStatus == entities.StatusConfirmed {
+					// No explicit confirm/decline signal anymore — derive intent from
+					// the AI category, defaulting any other picked-up call to "unknown".
+					if aiCategory == "Convenient to Pay" {
 						debtor.LastResponse = "accept"
-					} else if mappedStatus == entities.StatusDeclined {
+					} else if aiCategory == "Not Convenient to Pay" {
 						debtor.LastResponse = "reject"
-					} else if mappedStatus == entities.StatusNoResponse || (mappedStatus == entities.StatusCompleted && pickedUp) {
+					} else if pickedUp {
 						debtor.LastResponse = "unknown"
 					}
 
@@ -431,18 +352,6 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 		}
 	}
 
-	// Remove this call's queue row so the next call's KKP_Data fetch reads the
-	// next debtor. Must happen before we trigger the next ProcessSession below,
-	// which places the following call. Keyed by outbound_id, which Botnoi echoes
-	// back as callID.
-	if callID != "" {
-		if err := s.CallQueueService.DeleteByOutboundID(callID); err != nil {
-			log.Errorf("%s failed to delete call queue row %q: %v", tag, callID, err)
-		} else {
-			log.Infof("%s call queue row %q removed", tag, callID)
-		}
-	}
-
 	// Update active session stats and trigger next call
 	if resolvedWorkspaceID != "" {
 		sessions, _ := s.CallSessionService.GetCallSessions(entities.CallSessionFilter{WorkspaceID: resolvedWorkspaceID, Status: "running"})
@@ -451,7 +360,9 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 				if session.Status == "running" && session.WorkspaceID == resolvedWorkspaceID {
 					if finalStatus == "success" {
 						session.CompletedCalls++
-						if mappedStatus == entities.StatusConfirmed {
+						// Without an explicit confirm/decline signal, treat the AI
+						// "Convenient to Pay" category as a confirmed-to-pay call.
+						if aiCategory == "Convenient to Pay" {
 							session.ConfirmedCalls++
 						}
 					} else if finalStatus == "failed" {
@@ -688,64 +599,3 @@ Return STRICT JSON only: { "date_con": "YYYY-MM-DD" | null }`
 	return content.DateCon
 }
 
-func (s *webhookService) triggerSessionProcessor(sessionID string) {
-	supabaseURL := os.Getenv("SUPABASE_URL")
-	supabaseKey := os.Getenv("SUPABASE_SERVICE_ROLE_KEY")
-	if supabaseURL == "" || supabaseKey == "" {
-		return
-	}
-
-	url := fmt.Sprintf("%s/functions/v1/process-call-session", supabaseURL)
-	payload := map[string]string{"session_id": sessionID, "action": "continue"}
-	jsonPayload, _ := json.Marshal(payload)
-
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+supabaseKey)
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err == nil {
-		resp.Body.Close()
-	}
-}
-
-func (s *webhookService) toInt(v interface{}) int {
-	switch i := v.(type) {
-	case float64:
-		return int(math.Round(i))
-	case int:
-		return i
-	case string:
-		var f float64
-		fmt.Sscanf(i, "%f", &f)
-		return int(math.Round(f))
-	default:
-		return 0
-	}
-}
-
-func (s *webhookService) contains(slice []string, val string) bool {
-	for _, sliceVal := range slice {
-		if sliceVal == val {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *webhookService) askedAboutCallback(logText string) bool {
-	logText = strings.ToLower(logText)
-	keywords := []string{
-		"convenient", "callback", "call back", "call you back",
-		"what day", "what time", "which day", "which time",
-		"when would", "when can", "when is", "available",
-		"สะดวก", "นัด", "วันไหน", "เวลาไหน", "ติดต่อใหม่", "โทรกลับ",
-	}
-	for _, k := range keywords {
-		if strings.Contains(logText, k) {
-			return true
-		}
-	}
-	return false
-}
