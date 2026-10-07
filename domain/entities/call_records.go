@@ -60,4 +60,5 @@ type CallRecordFilter struct {
 	WorkspaceID  string `json:"workspace_id"`
 	Status       string `json:"status"`
 	BotnoiCallID string `json:"botnoi_call_id"`
+	PhoneNumber  string `json:"phone_number"`
 }

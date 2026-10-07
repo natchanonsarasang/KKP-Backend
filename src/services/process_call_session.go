@@ -23,7 +23,6 @@ type callProcessService struct {
 	DebtorsRepository       repositories.IDebtorsRepository
 	CallRecordsRepository   repositories.ICallRecordsRepository
 	CallAttemptsRepository  repositories.ICallAttemptsRepository
-	CallQueueService        ICallQueueService
 	OutboundClient          client.IOutboundBotnoiClient
 }
 
@@ -39,7 +38,6 @@ func NewCallProcessService(
 	debtors repositories.IDebtorsRepository,
 	records repositories.ICallRecordsRepository,
 	attempts repositories.ICallAttemptsRepository,
-	callQueue ICallQueueService,
 ) ICallProcessService {
 	return &callProcessService{
 		CallSessionsRepository:  sessions,
@@ -47,121 +45,37 @@ func NewCallProcessService(
 		DebtorsRepository:       debtors,
 		CallRecordsRepository:   records,
 		CallAttemptsRepository:  attempts,
-		CallQueueService:        callQueue,
-		OutboundClient:          client.NewOutboundBotnoiClient("", "", ""),
+		OutboundClient:          client.NewOutboundBotnoiClient(),
 	}
 }
 
-// thaiNumbers maps each digit to its Thai spoken word (digit-by-digit reading).
-var thaiNumbers = map[rune]string{
-	'0': "ศูนย์", '1': "หนึ่ง", '2': "สอง", '3': "สาม", '4': "สี่",
-	'5': "ห้า", '6': "หก", '7': "เจ็ด", '8': "แปด", '9': "เก้า",
+// metadataVariableKeys are the debtor variable keys forwarded to the Botnoi
+// agent as call metadata. Values are sent RAW (digits, combined plate+province,
+// amounts as numbers) — the agent formats them for speech itself.
+var metadataVariableKeys = []string{
+	"car_detail",
+	"overdue_installment",
+	"total_debt",
+	"total_interest",
+	"total_fine",
 }
 
-// toThaiDigitSpeech reads a string digit-by-digit in Thai (e.g. policy numbers).
-// Non-digit separators (- _ /) are dropped; English letters are upper-cased.
-func toThaiDigitSpeech(value string) string {
-	normalized := ""
-	for _, ch := range value {
-		if ch != ' ' && ch != '\t' && ch != '\n' {
-			normalized += string(ch)
+// buildCallMetadata builds the metadata object posted with the call. It carries
+// the debtor's customer_name plus the known debt variables; any value present on
+// the debtor is forwarded as-is.
+func buildCallMetadata(debtor entities.DebtorModel) map[string]any {
+	meta := map[string]any{
+		"customer_name": DebtorDisplayName(&debtor),
+	}
+	for _, k := range metadataVariableKeys {
+		if v, ok := debtor.Variables[k]; ok && strings.TrimSpace(v) != "" {
+			meta[k] = v
 		}
 	}
-	if normalized == "" {
-		return value
-	}
-
-	hasDigit := false
-	parts := []string{}
-	for _, ch := range normalized {
-		if word, ok := thaiNumbers[ch]; ok {
-			parts = append(parts, word)
-			hasDigit = true
-			continue
-		}
-		if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
-			parts = append(parts, strings.ToUpper(string(ch)))
-			continue
-		}
-		if ch == '-' || ch == '_' || ch == '/' {
-			continue
-		}
-		parts = append(parts, string(ch))
-	}
-
-	if !hasDigit {
-		return value
-	}
-	return strings.Join(parts, " ")
+	return meta
 }
 
-// prepareDebtorVariables clones the debtor variables, converts policy_no to
-// digit-by-digit Thai speech, and adds a Thai-formatted date_today field.
-func prepareDebtorVariables(input map[string]string) map[string]string {
-	vars := map[string]string{}
-	for k, v := range input {
-		vars[k] = v
-	}
-
-	if policyNo, ok := vars["policy_no"]; ok {
-		raw := strings.TrimSpace(policyNo)
-		if raw != "" {
-			vars["policy_no_raw"] = raw
-			vars["policy_no"] = toThaiDigitSpeech(raw)
-		}
-	}
-
-	// The user uploads the plate + province as one combined "car_detail" field
-	// (e.g. "ฅฆ 9091 ประจวบคีรีขันธ์"); the bot needs them as two separate
-	// variables, so split car_detail into the plate and a "province" variable.
-	if carDetail, ok := vars["car_detail"]; ok {
-		plate, province := splitCarDetail(carDetail)
-		vars["car_detail"] = plate
-		vars["province"] = province
-	}
-
-	vars["date_today"] = formatThaiDate(time.Now())
-	return vars
-}
-
-// splitCarDetail splits a combined vehicle-plate string like
-// "ฅฆ 9091 ประจวบคีรีขันธ์" into the plate ("ฅฆ 9091") and the province
-// ("ประจวบคีรีขันธ์"). The split point is the last digit, since the plate
-// always ends in its number and the province follows. If the input has no
-// digit (nothing to split on) the whole string is returned as the plate and
-// province is empty.
-func splitCarDetail(raw string) (plate, province string) {
-	raw = strings.TrimSpace(raw)
-	lastDigit := strings.LastIndexAny(raw, "0123456789")
-	if lastDigit < 0 {
-		return raw, ""
-	}
-	plate = strings.TrimSpace(raw[:lastDigit+1])
-	province = strings.TrimSpace(raw[lastDigit+1:])
-	return plate, province
-}
-
-// formatThaiDate formats a date in Thai Buddhist-era style, e.g. "วันจันทร์ ที่ 17 มิถุนายน 2569".
-func formatThaiDate(t time.Time) string {
-	loc, err := time.LoadLocation("Asia/Bangkok")
-	if err == nil {
-		t = t.In(loc)
-	}
-	weekdays := map[time.Weekday]string{
-		time.Sunday: "วันอาทิตย์", time.Monday: "วันจันทร์", time.Tuesday: "วันอังคาร",
-		time.Wednesday: "วันพุธ", time.Thursday: "วันพฤหัสบดี", time.Friday: "วันศุกร์",
-		time.Saturday: "วันเสาร์",
-	}
-	months := []string{"", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
-		"กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"}
-	buddhistYear := t.Year() + 543
-	return fmt.Sprintf("%s ที่ %d %s %d", weekdays[t.Weekday()], t.Day(), months[int(t.Month())], buddhistYear)
-}
-
-const (
-	staleThreshold = 5 * time.Minute
-	asrProvider    = "botnoi-aws-th-noise-classifier-v17c"
-)
+const staleThreshold = 5 * time.Minute
 
 func (sv *callProcessService) PauseSession(sessionID string) error {
 	return sv.CallSessionsRepository.UpdateCallSession(sessionID, entities.CallSessionDataModel{
@@ -221,11 +135,6 @@ func (sv *callProcessService) ProcessSession(sessionID string) error {
 		sv.CallListItemsRepository.UpdateManyStatus(staleIDs, "failed", "Call timed out", false)
 		for _, sid := range staleIDs {
 			sv.CallAttemptsRepository.UpdateStatusByListItemID(sid, "calling", "failed", "Call timed out", false, "Stale timeout (5 min)")
-			// A stale call never got a result, so its queue row would otherwise
-			// linger and be served to the NEXT call (wrong debtor). Drop it now.
-			// Keyed by the item id because the queue's outbound_id is now the
-			// Botnoi-assigned batch_id, which the stale sweep doesn't have.
-			sv.CallQueueService.DeleteByCallListItemID(sid)
 		}
 
 		// Stale items never got a webhook to bump these counters themselves
@@ -243,12 +152,6 @@ func (sv *callProcessService) ProcessSession(sessionID string) error {
 	maxConcurrent := session.Settings.ConcurrentCalls
 	if maxConcurrent == 0 {
 		maxConcurrent = 5
-	}
-	// V2 voicebot: the KKP_Data fetch carries no identifier, so we can only serve
-	// the queue head unambiguously if exactly one real call is live at a time.
-	// TestMode never hits the queue, so it keeps the configured concurrency.
-	if !session.Settings.TestMode {
-		maxConcurrent = 1
 	}
 	availableSlots := maxConcurrent - activeCallingCount
 	if availableSlots < 0 {
@@ -532,56 +435,32 @@ func (sv *callProcessService) placeCall(
 		return mockStatus != entities.StatusFailed
 	}
 
-	// V2 batch contract: first create a batch for this number. Botnoi returns a
-	// batch_id which becomes the outbound_id for the actual call and the key we
-	// poll for the result (GET /outbound/batch/{batch_id}) while the webhook is
-	// unavailable. batch_name is a traceable label; the timestamp suffix keeps it
-	// unique even across retries of the same item (the item id is reused on retry).
-	batchName := fmt.Sprintf("kkp_%s_%d", item.ID, time.Now().UnixMilli())
-	outboundID, err := sv.OutboundClient.CreateBatch(debtor.PhoneNumber, batchName)
-	if err != nil {
-		fiberlog.Errorf("[Session %s] create batch for item %s failed: %s", sessionID, item.ID, err)
-		sv.CallListItemsRepository.UpdateManyStatus([]string{item.ID}, "failed", "batch creation failed: "+err.Error(), false)
-		return false
+	// Dial the debtor with the pre-configured agent. The debtor's data rides
+	// along in metadata, so there is no mid-call fetch; the agent (voicebot
+	// persona/script) is selected by agent_id, configured on the Botnoi side.
+	req := entities.OutboundCallRequest{
+		Destination: debtor.PhoneNumber,
+		AgentID:     os.Getenv("OUTBOUND_AGENT_ID"),
+		Metadata:    buildCallMetadata(debtor),
 	}
 
-	// V2 contract: dial the debtor with the pre-configured agent. The agent
-	// (voicebot persona/script) is selected by name and configured on the Botnoi
-	// side, so no flow/TTS/ASR fields are sent. outbound_id is the batch_id.
-	payload := entities.OutboundBotnoiDataModel{
-		TelephoneNumber: debtor.PhoneNumber,
-		AgentName:       os.Getenv("OUTBOUND_AGENT_NAME"),
-		OutboundID:      outboundID,
-	}
-
-	// Push the debtor's variables onto the queue BEFORE dialing, so the row is
-	// already there when the voicebot's KKP_Data fetch lands early in the call.
-	// Because maxConcurrent is forced to 1 for real calls, this is the only live
-	// row and thus unambiguously the head the fetch will read.
-	if err := sv.CallQueueService.Enqueue(session, item, debtor, outboundID); err != nil {
-		fiberlog.Errorf("[Session %s] enqueue call queue for item %s failed: %s", sessionID, item.ID, err)
-		sv.CallListItemsRepository.UpdateManyStatus([]string{item.ID}, "failed", "queue enqueue failed: "+err.Error(), false)
-		return false
-	}
-
-	if err := sv.OutboundClient.MakeCall(payload); err != nil {
-		// Roll back the queue row we just pushed so a failed dial never serves
-		// its data to the next call.
-		sv.CallQueueService.DeleteByOutboundID(outboundID)
+	if err := sv.OutboundClient.MakeCall(req); err != nil {
+		fiberlog.Errorf("[Session %s] make call for item %s failed: %s", sessionID, item.ID, err)
 		sv.CallListItemsRepository.UpdateManyStatus([]string{item.ID}, "failed", err.Error(), false)
 		return false
 	}
 
 	// Generate the call record id ourselves so we can link it back to the item/attempt.
+	// The webhook correlates its result back to this record by phone number
+	// (debtor.PhoneNumber) since Botnoi echoes no outbound id.
 	callRecordID := uuid.NewString()
 
 	sv.CallRecordsRepository.InsertCallRecord(entities.CallRecordDataModel{
-		ID:           callRecordID,
-		PhoneNumber:  debtor.PhoneNumber,
-		BotnoiCallID: outboundID,
-		Status:       entities.StatusPending,
-		UserID:       session.UserID,
-		WorkspaceID:  session.WorkspaceID,
+		ID:          callRecordID,
+		PhoneNumber: debtor.PhoneNumber,
+		Status:      entities.StatusPending,
+		UserID:      session.UserID,
+		WorkspaceID: session.WorkspaceID,
 	})
 
 	// Link call_record_id back onto the list item (keep status "calling" until webhook).
@@ -607,8 +486,8 @@ func (sv *callProcessService) placeCall(
 		PickedUp:       boolPtr(false),
 	})
 
-	// Update debtor contact attempt count (real result comes later via the poller,
-	// or the webhook once it is available).
+	// Update debtor contact attempt count (the real pickup result comes later via
+	// the webhook).
 	nowTimeUTC := time.Now().UTC()
 	sv.DebtorsRepository.UpdateStats(item.DebtorID, entities.DebtorStatsUpdate{
 		ContactAttempts:    debtor.ContactAttempts + 1,
@@ -620,13 +499,6 @@ func (sv *callProcessService) placeCall(
 		CallOutcome:        debtor.CallOutcome,
 		CallAnswered:       debtor.CallAnswered,
 	})
-
-	// The webhook that used to close the loop is not finished on the Botnoi side
-	// yet, so poll the batch status endpoint until this call reports a terminal
-	// outcome, then finalize it (update records, advance the session, trigger the
-	// next call) — mirroring what the webhook does. When the webhook is ready this
-	// goroutine can simply be removed. Runs detached so the dial goroutine returns.
-	go sv.pollBatchUntilDone(sessionID, item, debtor, callRecordID, outboundID)
 
 	return true
 }
@@ -671,10 +543,3 @@ func parseHHMM(s string, def int) int {
 func strPtr(s string) *string { return &s }
 
 func boolPtr(b bool) *bool { return &b }
-
-func boolToStr(b bool) string {
-	if b {
-		return "True"
-	}
-	return "False"
-}

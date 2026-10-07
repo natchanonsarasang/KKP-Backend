@@ -1,11 +1,18 @@
 package entities
 
-// OutboundBotnoiDataModel is the V2 request body for the Botnoi POST /outbound
-// endpoint. The V2 contract only carries three fields — the agent (voicebot
-// script/persona) is pre-configured on the Botnoi side and selected by name, so
-// the caller no longer sends flow/TTS/ASR configuration.
-type OutboundBotnoiDataModel struct {
-	TelephoneNumber string `json:"telephone_number"`
-	AgentName       string `json:"agent_name"`
-	OutboundID      string `json:"outbound_id"`
+// OutboundCallRequest is the body for the Botnoi provisioning "place a call"
+// endpoint: POST /v1/provisioning/tenants/{tenant_id}/calls. The voicebot now
+// receives the debtor's data up-front via Metadata (there is no mid-call
+// KKP_Data fetch), and the agent (voicebot persona/script) is selected by
+// AgentID, pre-configured on the Botnoi side.
+type OutboundCallRequest struct {
+	// Destination is the phone number to dial (the debtor's number).
+	Destination string `json:"destination"`
+	// AgentID selects the pre-configured Botnoi agent (e.g. "agt_d2553cbbe2a2").
+	AgentID string `json:"agent_id"`
+	// Path is an optional routing hint ("pbx" | "pstn"); omitted when nil.
+	Path *string `json:"path,omitempty"`
+	// Metadata carries the debtor variables the agent reads during the call
+	// (customer_name, car_detail, overdue_installment, total_debt, ...).
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
