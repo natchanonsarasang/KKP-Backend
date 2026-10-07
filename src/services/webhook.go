@@ -472,7 +472,7 @@ Output format (STRICT JSON):
   "reason": "<short explanation>"
 }`
 
-	rawContent, err := s.callGroqChat("llama-3.3-70b-versatile", systemPrompt, `conversation_log:\n"""`+logText+`"""`)
+	rawContent, err := s.callGroqChat(groqModel(), systemPrompt, `conversation_log:\n"""`+logText+`"""`)
 	if err != nil {
 		log.Errorf("AI Classify Error: %v", err)
 		return ClassifyResult{Category: "Not Reached", Reason: "AI request failed", Confidence: 0}
@@ -500,6 +500,16 @@ Output format (STRICT JSON):
 	}
 
 	return ClassifyResult{Category: "Not Reached", Reason: "Defaulted or unmatched", Confidence: 0}
+}
+
+// groqModel returns the Groq chat model to use, from GROQ_MODEL, defaulting to a
+// model the account is known to have access to. (The old "llama-3.3-70b-versatile"
+// is not available to our key — see GET /openai/v1/models.) Must support JSON mode.
+func groqModel() string {
+	if m := strings.TrimSpace(os.Getenv("GROQ_MODEL")); m != "" {
+		return m
+	}
+	return "openai/gpt-oss-20b"
 }
 
 // callGroqChat sends an OpenAI-compatible chat-completion request to Groq's free
@@ -586,7 +596,7 @@ Rules:
 - "สัปดาห์หน้า" → ref + 7 days
 Return STRICT JSON only: { "date_con": "YYYY-MM-DD" | null }`
 
-	rawContent, err := s.callGroqChat("llama-3.3-70b-versatile", systemPrompt, `conversation_log:\n"""`+logText+`"""`)
+	rawContent, err := s.callGroqChat(groqModel(), systemPrompt, `conversation_log:\n"""`+logText+`"""`)
 	if err != nil {
 		log.Errorf("AI Date Extract Error: %v", err)
 		return ""
