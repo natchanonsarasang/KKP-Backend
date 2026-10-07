@@ -34,7 +34,7 @@ Docker: `docker build -t callecto-api .` then run exposing port 8080. The Docker
 `MONGODB_URI`, `MONGODB_NAME`, `PORT` (defaults to 8080).
 Auth uses Supabase JWKS — set `JWK_SET_URL` or `SUPABASE_URL` (falls back to `VITE_SUPABASE_URL`);
 if neither is set, it validates HS256 against `JWT_SECRET_KEY`. Outbound calls need
-`OUTBOUND_URL` (Botnoi host; a trailing `/api` is stripped), `OUTBOUND_ACCESS_TOKEN`,
+`OUTBOUND_URL` (the API base, e.g. `.../api`), `OUTBOUND_ACCESS_TOKEN`,
 `OUTBOUND_TENANT_ID` (your setup `_id` from `GET /me`), and `OUTBOUND_AGENT_ID`
 (the pre-configured Botnoi agent to dial with).
 
