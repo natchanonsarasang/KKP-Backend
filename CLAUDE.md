@@ -38,9 +38,9 @@ if neither is set, it validates HS256 against `JWT_SECRET_KEY`. Outbound calls n
 `OUTBOUND_TENANT_ID` (your setup `_id` from `GET /me`), and `OUTBOUND_AGENT_ID`
 (the pre-configured Botnoi agent to dial with).
 
-Note: `.env` is **not** in `.gitignore` and currently holds live MongoDB credentials and an
-outbound access token. Do not add new secrets to it expecting them to be ignored; treat the
-committed values as compromised.
+Note: `.env` is gitignored and untracked (only `.env.example` is committed). It was committed
+from the initial commit until `8c5d8fd` (June 2026), so the secrets from that period are still in
+git history — treat those old values as compromised and never reuse them.
 
 ## Architecture
 
