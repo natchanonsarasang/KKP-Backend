@@ -99,24 +99,13 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 		log.Infof("%s payload (struct): %+v", tag, payload)
 	}
 
-	// Status drives the outcome: only "completed" is a picked-up/successful call;
-	// "canceled" and any other (incl. future) status count as not picked up.
-	pickedUp := status == "completed"
-	var mappedStatus entities.CallStatus
-	var finalStatus string
-	if pickedUp {
-		mappedStatus = entities.StatusCompleted
-		finalStatus = "success"
-	} else {
-		mappedStatus = entities.StatusFailed
-		finalStatus = "failed"
-	}
-
-	// Human-readable outcome label: Title-case the raw status (Completed, Canceled, …).
-	callOutcome := "Unknown"
-	if status != "" {
-		callOutcome = strings.ToUpper(status[:1]) + status[1:]
-	}
+	// Any webhook means the call reached Botnoi and finished, so it is recorded as
+	// a completed, picked-up call whatever Botnoi's status says (completed,
+	// canceled, no_answer, ...). The raw status is still kept in result_data.
+	pickedUp := true
+	mappedStatus := entities.StatusCompleted
+	finalStatus := "success"
+	callOutcome := "Completed"
 
 	log.Infof("%s classified: mappedStatus=%s finalStatus=%s pickedUp=%t outcome=%q", tag, mappedStatus, finalStatus, pickedUp, callOutcome)
 
@@ -125,14 +114,6 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 	aiCategory := aiResult.Category
 	aiReason := aiResult.Reason
 	aiConfidence := aiResult.Confidence
-
-	// A not-picked-up call (canceled/failed) produced no real conversation for the
-	// AI to analyse, so the classifier only returns a synthetic reason/confidence.
-	// Blank them so the UI shows "-" instead of a misleading value.
-	if !pickedUp {
-		aiReason = ""
-		aiConfidence = 0
-	}
 
 	log.Infof("%s ai category=%q reason=%q confidence=%.2f", tag, aiCategory, aiReason, aiConfidence)
 
