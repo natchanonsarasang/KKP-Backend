@@ -126,12 +126,57 @@ func (sv *callProcessService) PauseSession(sessionID string) error {
 }
 
 func (sv *callProcessService) StopSession(sessionID string) error {
+	session, err := sv.CallSessionsRepository.FindByID(sessionID)
+	if err != nil {
+		return err
+	}
+	if session == nil {
+		return errors.New("session not found")
+	}
+
+	// Stop the session first so a concurrent ProcessSession (heartbeat, sweeper,
+	// webhook) can't dial into the slots released below.
 	now := time.Now().UTC()
-	return sv.CallSessionsRepository.UpdateCallSession(sessionID, entities.CallSessionDataModel{
+	if err := sv.CallSessionsRepository.UpdateCallSession(sessionID, entities.CallSessionDataModel{
 		Status:       "stopped",
 		CompletedAt:  &now,
 		ErrorMessage: strPtr("Stopped by user"),
-	})
+	}); err != nil {
+		return err
+	}
+
+	// Release calls still marked "calling". Slots are counted per user, so left
+	// as they are they would block the next session until the 5-minute stale
+	// timeout. Botnoi has no hang-up API, so a live call keeps going; if its
+	// webhook arrives later it still overwrites this with the real result.
+	callingItems, err := sv.CallListItemsRepository.FindByStatus(session.WorkspaceID, session.UserID, "calling")
+	if err != nil {
+		fiberlog.Errorf("[Session %s] Stop: list calling items failed: %s", sessionID, err)
+		return nil
+	}
+	if callingItems == nil || len(*callingItems) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(*callingItems))
+	for _, item := range *callingItems {
+		ids = append(ids, item.ID)
+	}
+	fiberlog.Infof("[Session %s] Stop: releasing %d calling items", sessionID, len(ids))
+	if err := sv.CallListItemsRepository.UpdateManyStatus(ids, "failed", "Stopped by user", false); err != nil {
+		fiberlog.Errorf("[Session %s] Stop: release calling items failed: %s", sessionID, err)
+		return nil
+	}
+	for _, id := range ids {
+		sv.CallAttemptsRepository.UpdateStatusByListItemID(id, "calling", "failed", "Stopped by user", false, "Session stopped by user")
+	}
+
+	if err := sv.CallSessionsRepository.UpdateCallSession(sessionID, entities.CallSessionDataModel{
+		FailedCalls: session.FailedCalls + len(ids),
+	}); err != nil {
+		fiberlog.Errorf("[Session %s] Stop: update failed_calls failed: %s", sessionID, err)
+	}
+	return nil
 }
 
 func (sv *callProcessService) ProcessSession(sessionID string) error {
