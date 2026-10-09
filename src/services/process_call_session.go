@@ -30,6 +30,8 @@ type ICallProcessService interface {
 	ProcessSession(sessionID string) error
 	PauseSession(sessionID string) error
 	StopSession(sessionID string) error
+	// RunStaleSweeper blocks; start it in its own goroutine.
+	RunStaleSweeper(interval time.Duration)
 }
 
 func NewCallProcessService(
@@ -79,6 +81,42 @@ func buildCallMetadata(debtor entities.DebtorModel) map[string]any {
 }
 
 const staleThreshold = 5 * time.Minute
+
+// RunStaleSweeper re-processes every running session on a fixed interval, the
+// same as the frontend's "continue" heartbeat. Calls whose result webhook never
+// arrives are then timed out (and the session keeps moving or completes) even
+// when no browser tab is open on the Start Calling page.
+func (sv *callProcessService) RunStaleSweeper(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		sessions, err := sv.CallSessionsRepository.FindByStatus("running")
+		if err != nil {
+			fiberlog.Errorf("[StaleSweeper] list running sessions failed: %s", err)
+			continue
+		}
+		if sessions == nil {
+			continue
+		}
+		for _, session := range *sessions {
+			sv.sweepSession(session.ID)
+		}
+	}
+}
+
+// sweepSession runs ProcessSession for one session, recovering from a panic so
+// a single bad session can't kill the sweeper goroutine (or the server).
+func (sv *callProcessService) sweepSession(sessionID string) {
+	defer func() {
+		if r := recover(); r != nil {
+			fiberlog.Errorf("[StaleSweeper] session %s panicked: %v", sessionID, r)
+		}
+	}()
+	if err := sv.ProcessSession(sessionID); err != nil {
+		fiberlog.Errorf("[StaleSweeper] session %s failed: %s", sessionID, err)
+	}
+}
 
 func (sv *callProcessService) PauseSession(sessionID string) error {
 	return sv.CallSessionsRepository.UpdateCallSession(sessionID, entities.CallSessionDataModel{

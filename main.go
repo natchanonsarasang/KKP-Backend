@@ -67,6 +67,10 @@ func main() {
 
 	gw.NewHTTPGateway(app, sv6, callRecordsSv, sv1, sv2, sv3, sv4, webhookSv, callProcessSv, usersSv, callTemplatesSv, callTokensSv, audioProxySv, botnoiLogsSv)
 
+	// Time out calls whose result webhook never arrives, without relying on an
+	// open browser tab to send the "continue" heartbeat.
+	go callProcessSv.RunStaleSweeper(time.Minute)
+
 	PORT := os.Getenv("PORT")
 
 	if PORT == "" {
