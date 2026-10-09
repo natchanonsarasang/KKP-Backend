@@ -99,24 +99,13 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 		log.Infof("%s payload (struct): %+v", tag, payload)
 	}
 
-	// Status drives the outcome: only "completed" is a picked-up/successful call;
-	// "canceled" and any other (incl. future) status count as not picked up.
-	pickedUp := status == "completed"
-	var mappedStatus entities.CallStatus
-	var finalStatus string
-	if pickedUp {
-		mappedStatus = entities.StatusCompleted
-		finalStatus = "success"
-	} else {
-		mappedStatus = entities.StatusFailed
-		finalStatus = "failed"
-	}
-
-	// Human-readable outcome label: Title-case the raw status (Completed, Canceled, …).
-	callOutcome := "Unknown"
-	if status != "" {
-		callOutcome = strings.ToUpper(status[:1]) + status[1:]
-	}
+	// Any webhook means the call reached Botnoi and finished, so it is recorded as
+	// a completed, picked-up call whatever Botnoi's status says (completed,
+	// canceled, no_answer, ...). The raw status is still kept in result_data.
+	pickedUp := true
+	mappedStatus := entities.StatusCompleted
+	finalStatus := "success"
+	callOutcome := "Completed"
 
 	log.Infof("%s classified: mappedStatus=%s finalStatus=%s pickedUp=%t outcome=%q", tag, mappedStatus, finalStatus, pickedUp, callOutcome)
 
@@ -125,14 +114,6 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 	aiCategory := aiResult.Category
 	aiReason := aiResult.Reason
 	aiConfidence := aiResult.Confidence
-
-	// A not-picked-up call (canceled/failed) produced no real conversation for the
-	// AI to analyse, so the classifier only returns a synthetic reason/confidence.
-	// Blank them so the UI shows "-" instead of a misleading value.
-	if !pickedUp {
-		aiReason = ""
-		aiConfidence = 0
-	}
 
 	log.Infof("%s ai category=%q reason=%q confidence=%.2f", tag, aiCategory, aiReason, aiConfidence)
 
@@ -472,7 +453,7 @@ Output format (STRICT JSON):
   "reason": "<short explanation>"
 }`
 
-	rawContent, err := s.callGroqChat("llama-3.3-70b-versatile", systemPrompt, `conversation_log:\n"""`+logText+`"""`)
+	rawContent, err := s.callGroqChat(groqModel(), systemPrompt, `conversation_log:\n"""`+logText+`"""`)
 	if err != nil {
 		log.Errorf("AI Classify Error: %v", err)
 		return ClassifyResult{Category: "Not Reached", Reason: "AI request failed", Confidence: 0}
@@ -500,6 +481,16 @@ Output format (STRICT JSON):
 	}
 
 	return ClassifyResult{Category: "Not Reached", Reason: "Defaulted or unmatched", Confidence: 0}
+}
+
+// groqModel returns the Groq chat model to use, from GROQ_MODEL, defaulting to a
+// model the account is known to have access to. (The old "llama-3.3-70b-versatile"
+// is not available to our key — see GET /openai/v1/models.) Must support JSON mode.
+func groqModel() string {
+	if m := strings.TrimSpace(os.Getenv("GROQ_MODEL")); m != "" {
+		return m
+	}
+	return "openai/gpt-oss-20b"
 }
 
 // callGroqChat sends an OpenAI-compatible chat-completion request to Groq's free
@@ -586,7 +577,7 @@ Rules:
 - "สัปดาห์หน้า" → ref + 7 days
 Return STRICT JSON only: { "date_con": "YYYY-MM-DD" | null }`
 
-	rawContent, err := s.callGroqChat("llama-3.3-70b-versatile", systemPrompt, `conversation_log:\n"""`+logText+`"""`)
+	rawContent, err := s.callGroqChat(groqModel(), systemPrompt, `conversation_log:\n"""`+logText+`"""`)
 	if err != nil {
 		log.Errorf("AI Date Extract Error: %v", err)
 		return ""
