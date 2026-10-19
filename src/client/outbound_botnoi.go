@@ -23,7 +23,27 @@ type IOutboundBotnoiClient interface {
 	// MakeCall dials req.Destination with req.AgentID over the trunk via
 	// POST /v1/provisioning/tenants/{tenant_id}/calls. The debtor's data rides
 	// along in req.Metadata, so no mid-call fetch is needed.
-	MakeCall(req entities.OutboundCallRequest) error
+	//
+	// It returns the call id Botnoi assigns to this call (its `call_id`), which
+	// is echoed back as `conversation_id` in the result webhook and is the key we
+	// correlate the webhook to its call_record on.
+	MakeCall(req entities.OutboundCallRequest) (string, error)
+}
+
+// outboundCallResponse is the subset of Botnoi's place-a-call response we read.
+// The id is returned as `call_id` (older responses used `outbound_id`); either
+// one comes back as `conversation_id` in the result webhook.
+type outboundCallResponse struct {
+	CallID     string `json:"call_id"`
+	OutboundID string `json:"outbound_id"`
+}
+
+// callID returns the usable correlation id, preferring call_id.
+func (r outboundCallResponse) callID() string {
+	if r.CallID != "" {
+		return r.CallID
+	}
+	return r.OutboundID
 }
 
 func NewOutboundBotnoiClient() IOutboundBotnoiClient {
@@ -35,17 +55,17 @@ func NewOutboundBotnoiClient() IOutboundBotnoiClient {
 	}
 }
 
-func (c *OutboundBotnoiClient) MakeCall(req entities.OutboundCallRequest) error {
+func (c *OutboundBotnoiClient) MakeCall(req entities.OutboundCallRequest) (string, error) {
 	// destination is the clearest field to key log lines on for a single call.
 	tag := "[Outbound " + req.Destination + "]"
 
 	if c.baseURL == "" {
 		fiberlog.Errorf("%s misconfigured: OUTBOUND_URL is empty", tag)
-		return errors.New("outbound call failed: OUTBOUND_URL is not set")
+		return "", errors.New("outbound call failed: OUTBOUND_URL is not set")
 	}
 	if c.tenantID == "" {
 		fiberlog.Errorf("%s misconfigured: OUTBOUND_TENANT_ID is empty", tag)
-		return errors.New("outbound call failed: OUTBOUND_TENANT_ID is not set")
+		return "", errors.New("outbound call failed: OUTBOUND_TENANT_ID is not set")
 	}
 	if c.accessToken == "" {
 		fiberlog.Warnf("%s OUTBOUND_ACCESS_TOKEN is empty — request will likely be rejected", tag)
@@ -73,17 +93,29 @@ func (c *OutboundBotnoiClient) MakeCall(req entities.OutboundCallRequest) error 
 	if err != nil {
 		// Transport-level failure (DNS, timeout, connection refused, ...).
 		fiberlog.Errorf("%s request failed after %s: %v", tag, elapsed, err)
-		return err
+		return "", err
 	}
 
 	if resp.IsError() {
 		// HTTP-level failure (non-2xx). Log status + body so the upstream reason is visible.
 		fiberlog.Errorf("%s HTTP %d after %s: %s", tag, resp.StatusCode(), elapsed, resp.String())
-		return errors.New("error response from Botnoi API (HTTP " + resp.Status() + "): " + resp.String())
+		return "", errors.New("error response from Botnoi API (HTTP " + resp.Status() + "): " + resp.String())
 	}
 
-	fiberlog.Infof("%s success: HTTP %d in %s", tag, resp.StatusCode(), elapsed)
-	return nil
+	// Parse out the call id so the webhook can be correlated to this call by it
+	// (Botnoi echoes it as conversation_id). A missing id is not fatal — we fall
+	// back to phone-number matching in the webhook — but it is worth flagging.
+	var parsed outboundCallResponse
+	if err := json.Unmarshal(resp.Body(), &parsed); err != nil {
+		fiberlog.Warnf("%s could not parse call id from response: %v (body=%s)", tag, err, resp.String())
+	}
+	callID := parsed.callID()
+	if callID == "" {
+		fiberlog.Warnf("%s response carried no call_id — webhook will fall back to phone matching (body=%s)", tag, resp.String())
+	}
+
+	fiberlog.Infof("%s success: HTTP %d in %s call_id=%s", tag, resp.StatusCode(), elapsed, callID)
+	return callID, nil
 }
 
 // callsURL builds the place-a-call endpoint by appending the provisioning path

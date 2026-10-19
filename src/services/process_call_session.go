@@ -531,27 +531,30 @@ func (sv *callProcessService) placeCall(
 		Metadata:    buildCallMetadata(debtor),
 	}
 
-	if err := sv.OutboundClient.MakeCall(req); err != nil {
+	botnoiCallID, err := sv.OutboundClient.MakeCall(req)
+	if err != nil {
 		fiberlog.Errorf("[Session %s] make call for item %s failed: %s", sessionID, item.ID, err)
 		sv.CallListItemsRepository.UpdateManyStatus([]string{item.ID}, "failed", err.Error(), false)
 		return false
 	}
 
 	// Generate the call record id ourselves so we can link it back to the item/attempt.
-	// The webhook correlates its result back to this record by phone number
-	// (debtor.PhoneNumber, echoed as callerNumber). CreatedAt must be set so the
-	// webhook can pick the newest pending record when stale ones linger.
+	// The webhook correlates its result back to this record by botnoi_call_id (the
+	// call_id Botnoi returns here, echoed back as conversation_id), falling back to
+	// phone number. CreatedAt must be set so the webhook can pick the newest pending
+	// record when stale ones linger.
 	callRecordID := uuid.NewString()
 	nowRecord := time.Now().UTC()
 
 	sv.CallRecordsRepository.InsertCallRecord(entities.CallRecordDataModel{
-		ID:          callRecordID,
-		PhoneNumber: debtor.PhoneNumber,
-		Status:      entities.StatusPending,
-		UserID:      session.UserID,
-		WorkspaceID: session.WorkspaceID,
-		CreatedAt:   nowRecord,
-		UpdatedAt:   nowRecord,
+		ID:           callRecordID,
+		PhoneNumber:  debtor.PhoneNumber,
+		BotnoiCallID: botnoiCallID,
+		Status:       entities.StatusPending,
+		UserID:       session.UserID,
+		WorkspaceID:  session.WorkspaceID,
+		CreatedAt:    nowRecord,
+		UpdatedAt:    nowRecord,
 	})
 
 	// Link call_record_id back onto the list item (keep status "calling" until webhook).
