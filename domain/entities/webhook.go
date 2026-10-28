@@ -6,9 +6,11 @@ package entities
 // correlate the result back to its originating call_record on; CallerNumber (the
 // debtor's number) is the fallback when ConversationID is missing/unmatched.
 //
-// Status is the call outcome; known values are "completed" and "canceled", and
-// more may appear in future. Only "completed" counts as a picked-up/successful
-// call — everything else (canceled, failed, ...) is treated as not picked up.
+// Status is Botnoi's raw call outcome (e.g. "completed", "canceled", "failed").
+// It is NOT a reliable "was it answered" signal on its own — Botnoi sends
+// "canceled" even for calls that connected and held a full conversation. Whether
+// the debtor was actually reached is derived from the transcript/duration in the
+// webhook handler, not from Status alone.
 type WebhookPayload struct {
 	ConversationID  string `json:"conversation_id,omitempty"`
 	AgentID         string `json:"agent_id,omitempty"`
@@ -20,5 +22,8 @@ type WebhookPayload struct {
 	EndTime         string `json:"end_time,omitempty"`
 	Duration        int    `json:"duration,omitempty"`
 	ConversationLog string `json:"conversation_log,omitempty"`
+	// AudioURL is the (pre-signed) recording of the call, present when Botnoi has
+	// an audio log for it. Stored on the call_attempt so the UI can play it back.
+	AudioURL        string `json:"audio_url,omitempty"`
 	CallerNumber    string `json:"callerNumber,omitempty"`
 }
