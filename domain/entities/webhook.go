@@ -13,6 +13,9 @@ type WebhookPayload struct {
 	ConversationID  string `json:"conversation_id,omitempty"`
 	AgentID         string `json:"agent_id,omitempty"`
 	Status          string `json:"status,omitempty"`
+	// Reason is Botnoi's machine-readable failure cause for non-completed calls
+	// (e.g. "unreachable", "busy"). Empty for a completed call.
+	Reason          string `json:"reason,omitempty"`
 	StartTime       string `json:"start_time,omitempty"`
 	EndTime         string `json:"end_time,omitempty"`
 	Duration        int    `json:"duration,omitempty"`

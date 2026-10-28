@@ -101,13 +101,22 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 		log.Infof("%s payload (struct): %+v", tag, payload)
 	}
 
-	// Any webhook means the call reached Botnoi and finished, so it is recorded as
-	// a completed, picked-up call whatever Botnoi's status says (completed,
-	// canceled, no_answer, ...). The raw status is still kept in result_data.
-	pickedUp := true
-	mappedStatus := entities.StatusCompleted
-	finalStatus := "success"
-	callOutcome := "Completed"
+	// The Botnoi status drives the outcome: only "completed" means the debtor
+	// picked up and the call finished successfully. Everything else (failed,
+	// canceled, no_answer, busy, rejected, unreachable, ...) means the debtor was
+	// not reached. The raw status/reason are still kept in result_data.
+	pickedUp := status == "completed"
+	mappedStatus := entities.StatusFailed
+	finalStatus := "failed"
+	callOutcome := "Not Picked Up"
+	if pickedUp {
+		mappedStatus = entities.StatusCompleted
+		finalStatus = "success"
+		callOutcome = "Completed"
+	} else if reason := strings.TrimSpace(payload.Reason); reason != "" {
+		// Surface Botnoi's failure cause (e.g. "unreachable") in the outcome.
+		callOutcome = fmt.Sprintf("Not Picked Up (%s)", reason)
+	}
 
 	log.Infof("%s classified: mappedStatus=%s finalStatus=%s pickedUp=%t outcome=%q", tag, mappedStatus, finalStatus, pickedUp, callOutcome)
 
