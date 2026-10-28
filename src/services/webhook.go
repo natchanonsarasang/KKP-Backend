@@ -79,9 +79,9 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 	conversationID := strings.TrimSpace(payload.ConversationID)
 	phoneNumber := payload.CallerNumber
 	duration := payload.Duration
-	// audio is fetched via a separate endpoint we don't call yet; keep the notes
-	// key present (empty) so the frontend's parsing stays stable.
-	audioURL := ""
+	// Botnoi now delivers the recording URL on the webhook itself; store it so the
+	// UI's "view conversation" can play back the audio alongside the transcript.
+	audioURL := strings.TrimSpace(payload.AudioURL)
 
 	if conversationID == "" && phoneNumber == "" {
 		log.Warnf("[Webhook] received with neither conversation_id nor callerNumber (status=%q): %+v", status, payload)
@@ -101,21 +101,22 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 		log.Infof("%s payload (struct): %+v", tag, payload)
 	}
 
-	// The Botnoi status drives the outcome: only "completed" means the debtor
-	// picked up and the call finished successfully. Everything else (failed,
-	// canceled, no_answer, busy, rejected, unreachable, ...) means the debtor was
-	// not reached. The raw status/reason are still kept in result_data.
-	pickedUp := status == "completed"
+	// Decide whether the debtor was actually reached. Botnoi's status is not a
+	// reliable signal — it sends "canceled" even for calls that connected and held
+	// a full conversation — so we key off the evidence of a real call: a non-empty
+	// transcript or a non-zero duration (or an explicit "completed" status). A true
+	// non-connect (e.g. status "failed" reason "unreachable", duration 0, no log)
+	// is the only "not picked up" case, and is labelled "Incomplete". The raw
+	// status/reason are still kept in result_data.
+	hasConversation := strings.TrimSpace(conversationLog) != "" || duration > 0
+	pickedUp := status == "completed" || hasConversation
 	mappedStatus := entities.StatusFailed
 	finalStatus := "failed"
-	callOutcome := "Not Picked Up"
+	callOutcome := "Incomplete"
 	if pickedUp {
 		mappedStatus = entities.StatusCompleted
 		finalStatus = "success"
 		callOutcome = "Completed"
-	} else if reason := strings.TrimSpace(payload.Reason); reason != "" {
-		// Surface Botnoi's failure cause (e.g. "unreachable") in the outcome.
-		callOutcome = fmt.Sprintf("Not Picked Up (%s)", reason)
 	}
 
 	log.Infof("%s classified: mappedStatus=%s finalStatus=%s pickedUp=%t outcome=%q", tag, mappedStatus, finalStatus, pickedUp, callOutcome)
