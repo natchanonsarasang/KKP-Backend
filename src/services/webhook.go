@@ -71,18 +71,20 @@ func NewWebhookService(
 }
 
 func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
-	// Extract fields. Botnoi echoes no outbound/call id, so the debtor's number
-	// (callerNumber) is the only key we can correlate the call back on.
+	// Extract fields. conversation_id is the call_id Botnoi returned when the call
+	// was placed (stored as call_record.botnoi_call_id) and is the primary key we
+	// correlate on; callerNumber (the debtor's number) is the fallback.
 	status := strings.ToLower(strings.TrimSpace(payload.Status))
 	conversationLog := payload.ConversationLog
+	conversationID := strings.TrimSpace(payload.ConversationID)
 	phoneNumber := payload.CallerNumber
 	duration := payload.Duration
 	// audio is fetched via a separate endpoint we don't call yet; keep the notes
 	// key present (empty) so the frontend's parsing stays stable.
 	audioURL := ""
 
-	if phoneNumber == "" {
-		log.Warnf("[Webhook] received with no callerNumber (status=%q): %+v", status, payload)
+	if conversationID == "" && phoneNumber == "" {
+		log.Warnf("[Webhook] received with neither conversation_id nor callerNumber (status=%q): %+v", status, payload)
 		return nil
 	}
 
@@ -99,13 +101,22 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 		log.Infof("%s payload (struct): %+v", tag, payload)
 	}
 
-	// Any webhook means the call reached Botnoi and finished, so it is recorded as
-	// a completed, picked-up call whatever Botnoi's status says (completed,
-	// canceled, no_answer, ...). The raw status is still kept in result_data.
-	pickedUp := true
-	mappedStatus := entities.StatusCompleted
-	finalStatus := "success"
-	callOutcome := "Completed"
+	// The Botnoi status drives the outcome: only "completed" means the debtor
+	// picked up and the call finished successfully. Everything else (failed,
+	// canceled, no_answer, busy, rejected, unreachable, ...) means the debtor was
+	// not reached. The raw status/reason are still kept in result_data.
+	pickedUp := status == "completed"
+	mappedStatus := entities.StatusFailed
+	finalStatus := "failed"
+	callOutcome := "Not Picked Up"
+	if pickedUp {
+		mappedStatus = entities.StatusCompleted
+		finalStatus = "success"
+		callOutcome = "Completed"
+	} else if reason := strings.TrimSpace(payload.Reason); reason != "" {
+		// Surface Botnoi's failure cause (e.g. "unreachable") in the outcome.
+		callOutcome = fmt.Sprintf("Not Picked Up (%s)", reason)
+	}
 
 	log.Infof("%s classified: mappedStatus=%s finalStatus=%s pickedUp=%t outcome=%q", tag, mappedStatus, finalStatus, pickedUp, callOutcome)
 
@@ -120,28 +131,60 @@ func (s *webhookService) ProcessWebhook(payload entities.WebhookPayload) error {
 	// Resolve Owner (UserID, WorkspaceID)
 	var resolvedUserID, resolvedWorkspaceID string
 
-	// 1. Match the originating call_record by phone number. The dialer leaves it
-	// "pending" until this webhook lands; if several pending records share the
-	// number (a prior call never resolved), take the most recent.
+	// 1. Match the originating call_record. The dialer leaves it "pending" until
+	// this webhook lands. Prefer the call_id (botnoi_call_id == conversation_id):
+	// it is unique per call, so it resolves the right record even when several
+	// calls share a phone number. Fall back to phone number when the id is absent
+	// or unmatched; if several pending records share the number, take the newest.
 	var callRecord *entities.CallRecordDataModel
-	records, err := s.CallRecordsService.GetAllCallRecords(entities.CallRecordFilter{
-		PhoneNumber: phoneNumber,
-		Status:      string(entities.StatusPending),
-	})
-	if err != nil {
-		log.Errorf("%s lookup call_record by phone failed: %v", tag, err)
-	}
-	if records != nil && len(*records) > 0 {
-		callRecord = &(*records)[0]
-		for i := range *records {
-			if (*records)[i].CreatedAt.After(callRecord.CreatedAt) {
-				callRecord = &(*records)[i]
-			}
+
+	if conversationID != "" {
+		records, err := s.CallRecordsService.GetAllCallRecords(entities.CallRecordFilter{
+			BotnoiCallID: conversationID,
+		})
+		if err != nil {
+			log.Errorf("%s lookup call_record by botnoi_call_id failed: %v", tag, err)
 		}
+		if records != nil && len(*records) > 0 {
+			callRecord = &(*records)[0]
+			for i := range *records {
+				if (*records)[i].CreatedAt.After(callRecord.CreatedAt) {
+					callRecord = &(*records)[i]
+				}
+			}
+		} else {
+			log.Warnf("%s no call_record matched botnoi_call_id %q — falling back to phone", tag, conversationID)
+		}
+	}
+
+	if callRecord == nil && phoneNumber != "" {
+		records, err := s.CallRecordsService.GetAllCallRecords(entities.CallRecordFilter{
+			PhoneNumber: phoneNumber,
+			Status:      string(entities.StatusPending),
+		})
+		if err != nil {
+			log.Errorf("%s lookup call_record by phone failed: %v", tag, err)
+		}
+		if records != nil && len(*records) > 0 {
+			callRecord = &(*records)[0]
+			for i := range *records {
+				if (*records)[i].CreatedAt.After(callRecord.CreatedAt) {
+					callRecord = &(*records)[i]
+				}
+			}
+		} else {
+			log.Warnf("%s no pending call_record matched phone %q", tag, phoneNumber)
+		}
+	}
+
+	if callRecord != nil {
 		resolvedUserID = callRecord.UserID
 		resolvedWorkspaceID = callRecord.WorkspaceID
-	} else {
-		log.Warnf("%s no pending call_record matched phone %q", tag, phoneNumber)
+		// When Botnoi omits callerNumber, recover it from the matched record so the
+		// debtor-stats / session-advance steps below (keyed on phone) still run.
+		if phoneNumber == "" {
+			phoneNumber = callRecord.PhoneNumber
+		}
 	}
 
 	// 2. Fallback: Try from Debtor (WorkspaceID resolve)
